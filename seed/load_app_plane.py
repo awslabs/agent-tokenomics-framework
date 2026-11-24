@@ -154,7 +154,7 @@ def main() -> None:
     print(f"  flags : {_seed_flags(ddb.Table(args.flags_table))} items (baseline: all features OFF)")
     print(f"Done. {len(users) - skipped} users, {total_orders} orders.")
     if skipped:
-        print(f"  {skipped} user(s) skipped: set {_PASSWORD_ENV} and re-run.")
+        print(f"  {skipped} user(s) skipped: set the password variable named in the warnings above and re-run.")
 
 
 if __name__ == "__main__":
