@@ -1,0 +1,44 @@
+[
+  {
+    "id": "FAQ-RETURN",
+    "keywords": ["return", "returns", "send back", "return policy"],
+    "question": "What is the return policy?",
+    "answer": "Items can be returned within 30 days of delivery for a full refund, provided they are in original condition. Start a return from Your Orders; a prepaid label is emailed to you. Refunds post to the original payment method within 5-7 business days of us receiving the item."
+  },
+  {
+    "id": "FAQ-REFUND",
+    "keywords": ["refund", "money back", "reimburse", "refunded"],
+    "question": "How long do refunds take?",
+    "answer": "Once we receive and inspect a returned item, refunds are issued to the original payment method and typically appear within 5-7 business days. Cancelled orders that were never shipped are refunded within 1-2 business days."
+  },
+  {
+    "id": "FAQ-SHIPPING",
+    "keywords": ["shipping", "delivery", "how long", "when will", "arrive", "eta"],
+    "question": "How long does shipping take?",
+    "answer": "Standard shipping is 3-5 business days. Prime members get free 2-day shipping on eligible items. You can track any order from Your Orders using the carrier tracking number."
+  },
+  {
+    "id": "FAQ-CANCEL",
+    "keywords": ["cancel", "cancellation", "stop order"],
+    "question": "Can I cancel an order?",
+    "answer": "An order can be cancelled for free as long as it has not yet been dispatched. Once an order is dispatched it can no longer be cancelled, but you can refuse delivery or start a return once it arrives."
+  },
+  {
+    "id": "FAQ-WARRANTY",
+    "keywords": ["warranty", "warranties", "guarantee", "defective", "faulty", "broken", "warranty claim", "repair", "replacement"],
+    "question": "What does the warranty cover and how do I file a claim?",
+    "answer": "Most products carry a 1-year limited warranty covering manufacturing defects (it does not cover accidental or cosmetic damage). A warranty claim can be filed on an order that has been delivered: go to Your Orders, select the delivered item, choose 'File a warranty claim', and describe the defect. Our team reviews claims within 2 business days and arranges a repair or replacement if eligible. Orders that are still dispatched (not yet delivered), cancelled, or refunded are not eligible for a warranty claim."
+  },
+  {
+    "id": "FAQ-SUBSCRIPTION",
+    "keywords": ["subscription", "prime", "membership", "renew", "cancel membership", "plan"],
+    "question": "How do I manage my subscription?",
+    "answer": "You can view, change, or cancel your subscription plan under Account > Memberships. Prime renews annually; you can turn off auto-renew any time and keep benefits until the current period ends."
+  },
+  {
+    "id": "FAQ-PAYMENT",
+    "keywords": ["payment", "past due", "card declined", "billing", "pay"],
+    "question": "My payment is past due. What do I do?",
+    "answer": "If a payment is past due, update your default payment method under Account > Payments and we will retry the charge automatically. Access to paid benefits resumes as soon as the charge succeeds."
+  }
+]

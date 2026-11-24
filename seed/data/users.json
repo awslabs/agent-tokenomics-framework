@@ -1,0 +1,115 @@
+[
+  {
+    "email": "bob@example.com",
+    "name": "Bob Carter",
+    "tier": "prime",
+    "orders": [
+      {
+        "order_id": "ORD-1001",
+        "placed": "2026-08-20",
+        "status": "delivered",
+        "total": 129.99,
+        "items": [{ "sku": "SKU-KB-01", "name": "Mechanical Keyboard", "qty": 1, "price": 129.99 }],
+        "shipping": { "carrier": "UPS", "tracking": "1Z999AA10123456784", "eta": "2026-08-24", "delivered_on": "2026-08-23" }
+      },
+      {
+        "order_id": "ORD-1002",
+        "placed": "2026-09-01",
+        "status": "dispatched",
+        "total": 59.5,
+        "items": [{ "sku": "SKU-MS-07", "name": "Wireless Mouse", "qty": 1, "price": 59.5 }],
+        "shipping": { "carrier": "FedEx", "tracking": "7712 3456 7890", "eta": "2026-09-08", "delivered_on": null }
+      },
+      {
+        "order_id": "ORD-1003",
+        "placed": "2026-09-14",
+        "status": "cancelled",
+        "total": 199.0,
+        "items": [{ "sku": "SKU-CH-14", "name": "Ergonomic Office Chair", "qty": 1, "price": 199.0 }],
+        "shipping": { "carrier": null, "tracking": null, "eta": null, "delivered_on": null }
+      },
+      {
+        "order_id": "ORD-1004",
+        "placed": "2026-09-18",
+        "status": "delivered",
+        "total": 42.75,
+        "items": [{ "sku": "SKU-CB-03", "name": "USB-C Charging Cable (2-pack)", "qty": 1, "price": 42.75 }],
+        "shipping": { "carrier": "DHL", "tracking": "JD0002000123456789", "eta": "2026-09-20", "delivered_on": "2026-09-20" }
+      },
+      {
+        "order_id": "ORD-1005",
+        "placed": "2026-09-05",
+        "status": "delivered",
+        "total": 349.99,
+        "items": [{ "sku": "SKU-LT-31", "name": "14-inch Laptop Stand + Dock", "qty": 1, "price": 349.99 }],
+        "shipping": { "carrier": "UPS", "tracking": "1Z999AA10552233445", "eta": "2026-09-16", "delivered_on": "2026-09-15" }
+      },
+      {
+        "order_id": "ORD-1006",
+        "placed": "2026-07-30",
+        "status": "refunded",
+        "total": 24.99,
+        "items": [{ "sku": "SKU-MP-09", "name": "Desk Mouse Pad", "qty": 1, "price": 24.99 }],
+        "shipping": { "carrier": "USPS", "tracking": "9400111899223344556677", "eta": "2026-08-04", "delivered_on": "2026-08-03" }
+      },
+      {
+        "order_id": "ORD-1007",
+        "placed": "2026-08-10",
+        "status": "delivered",
+        "total": 89.0,
+        "items": [{ "sku": "SKU-WB-18", "name": "1080p Webcam", "qty": 1, "price": 89.0 }],
+        "shipping": { "carrier": "UPS", "tracking": "1Z999AA10789012345", "eta": "2026-08-15", "delivered_on": "2026-08-14" }
+      },
+      {
+        "order_id": "ORD-1008",
+        "placed": "2026-09-19",
+        "status": "delivered",
+        "total": 74.5,
+        "items": [{ "sku": "SKU-SP-05", "name": "Bluetooth Speaker", "qty": 1, "price": 74.5 }],
+        "shipping": { "carrier": "UPS", "tracking": "1Z999AA10998877665", "eta": "2026-09-24", "delivered_on": "2026-09-23" }
+      },
+      {
+        "order_id": "ORD-1009",
+        "placed": "2026-06-22",
+        "status": "delivered",
+        "total": 319.98,
+        "items": [
+          { "sku": "SKU-MN-27", "name": "27-inch 4K Monitor", "qty": 1, "price": 279.99 },
+          { "sku": "SKU-HD-02", "name": "HDMI 2.1 Cable", "qty": 2, "price": 19.995 }
+        ],
+        "shipping": { "carrier": "FedEx", "tracking": "7712 9988 7766", "eta": "2026-06-27", "delivered_on": "2026-06-26" }
+      },
+      {
+        "order_id": "ORD-1010",
+        "placed": "2026-09-12",
+        "status": "delivered",
+        "total": 15.99,
+        "items": [{ "sku": "SKU-PN-41", "name": "Gel Pen Set", "qty": 1, "price": 15.99 }],
+        "shipping": { "carrier": "USPS", "tracking": "9400111899220011223344", "eta": "2026-09-17", "delivered_on": "2026-09-16" }
+      }
+    ]
+  },
+  {
+    "email": "eva@example.com",
+    "name": "Eva Martinez",
+    "tier": "basic",
+    "orders": [
+      {
+        "order_id": "ORD-2001",
+        "placed": "2026-09-03",
+        "status": "processing",
+        "total": 249.0,
+        "items": [{ "sku": "SKU-MN-22", "name": "27-inch Monitor", "qty": 1, "price": 249.0 }],
+        "shipping": { "carrier": null, "tracking": null, "eta": "2026-09-12", "delivered_on": null }
+      },
+      {
+        "order_id": "ORD-2002",
+        "placed": "2026-08-28",
+        "status": "cancelled",
+        "total": 89.0,
+        "items": [{ "sku": "SKU-HP-11", "name": "Noise-Cancelling Headphones", "qty": 1, "price": 89.0 }],
+        "shipping": { "carrier": null, "tracking": null, "eta": null, "delivered_on": null }
+      }
+    ]
+  }
+]

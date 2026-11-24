@@ -1,0 +1,4 @@
+# Control-plane Lambda dependencies. boto3 is present in the Lambda runtime but
+# pinned here so local packaging installs a known version (DynamoDB store +
+# bedrock-agentcore InvokeAgentRuntime).
+boto3>=1.35.0

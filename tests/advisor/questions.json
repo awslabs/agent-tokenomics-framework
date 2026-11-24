@@ -1,0 +1,465 @@
+{
+  "source": "Advisor requirements: sample questions we can ask the Advisor",
+  "window": "7d",
+  "questions": [
+    {
+      "id": "Q1",
+      "question": "Why did total token cost go up this week vs last week?",
+      "category": "Cost explanation",
+      "requirement": "R4",
+      "likely_patterns": [
+        "TKN-19"
+      ],
+      "expected_tools": [
+        "get_period_comparison"
+      ],
+      "expect_evidence": null,
+      "expect_citations": true,
+      "levels": [
+        "fleet",
+        "agent",
+        "model"
+      ],
+      "reconcile_with": null,
+      "no_savings_projection": true,
+      "notes": ""
+    },
+    {
+      "id": "Q2",
+      "question": "Which agent (orchestrator / knowledge / order) drives the most cost, and why?",
+      "category": "Attribution",
+      "requirement": "R2, R4",
+      "likely_patterns": [
+        "TKN-17"
+      ],
+      "expected_tools": [
+        "get_cost_summary"
+      ],
+      "expect_evidence": null,
+      "expect_citations": true,
+      "levels": [
+        "agent"
+      ],
+      "reconcile_with": "cost_by_agent",
+      "no_savings_projection": true,
+      "notes": ""
+    },
+    {
+      "id": "Q3",
+      "question": "What's the cost split across the three agents over the last 7 days?",
+      "category": "Attribution",
+      "requirement": "R2",
+      "likely_patterns": [
+        "TKN-17"
+      ],
+      "expected_tools": [
+        "get_cost_summary"
+      ],
+      "expect_evidence": true,
+      "expect_citations": true,
+      "levels": [
+        "agent"
+      ],
+      "reconcile_with": "cost_by_agent",
+      "no_savings_projection": true,
+      "notes": ""
+    },
+    {
+      "id": "Q4",
+      "question": "Which model consumes most of our spend, and is a cheaper model doing similar work?",
+      "category": "Model mix",
+      "requirement": "R2, R9a",
+      "likely_patterns": [
+        "TKN-02"
+      ],
+      "expected_tools": [
+        "get_cost_summary"
+      ],
+      "expect_evidence": true,
+      "expect_citations": true,
+      "levels": [
+        "model",
+        "agent"
+      ],
+      "reconcile_with": null,
+      "no_savings_projection": true,
+      "notes": ""
+    },
+    {
+      "id": "Q5",
+      "question": "Who are my top 5 users by cost this month, and how far ahead of the median?",
+      "category": "User-level",
+      "requirement": "R3",
+      "likely_patterns": [
+        "TKN-17"
+      ],
+      "expected_tools": [
+        "get_cost_summary"
+      ],
+      "expect_evidence": true,
+      "expect_citations": true,
+      "levels": [
+        "user"
+      ],
+      "reconcile_with": "top_users",
+      "no_savings_projection": true,
+      "notes": ""
+    },
+    {
+      "id": "Q6",
+      "question": "Is any single user spending far more than everyone else right now?",
+      "category": "User outlier",
+      "requirement": "R3, R5",
+      "likely_patterns": [
+        "TKN-17"
+      ],
+      "expected_tools": [
+        "get_outliers"
+      ],
+      "expect_evidence": null,
+      "expect_citations": true,
+      "levels": [
+        "user"
+      ],
+      "reconcile_with": "top_users",
+      "no_savings_projection": true,
+      "notes": ""
+    },
+    {
+      "id": "Q7",
+      "question": "How does user bob@example.com's usage pattern differ from a typical user?",
+      "category": "User-level",
+      "requirement": "R3",
+      "likely_patterns": [
+        "TKN-17"
+      ],
+      "expected_tools": [
+        "get_user_profile"
+      ],
+      "expect_evidence": null,
+      "expect_citations": true,
+      "levels": [
+        "user"
+      ],
+      "reconcile_with": null,
+      "no_savings_projection": true,
+      "notes": ""
+    },
+    {
+      "id": "Q8",
+      "question": "Is the order agent's model justified by its work, or over-provisioned?",
+      "category": "Agent diagnosis",
+      "requirement": "R2, R5",
+      "likely_patterns": [
+        "TKN-02"
+      ],
+      "expected_tools": [
+        "get_cost_summary"
+      ],
+      "expect_evidence": null,
+      "expect_citations": true,
+      "levels": [
+        "agent",
+        "model"
+      ],
+      "reconcile_with": null,
+      "no_savings_projection": true,
+      "notes": ""
+    },
+    {
+      "id": "Q9",
+      "question": "Which agent most needs tokenomics attention right now, and what kind?",
+      "category": "Agent diagnosis",
+      "requirement": "R5",
+      "likely_patterns": [
+        "TKN-02",
+        "TKN-07",
+        "TKN-15"
+      ],
+      "expected_tools": [
+        "get_cost_summary",
+        "get_cache_health",
+        "get_plan_vs_actual"
+      ],
+      "expect_evidence": null,
+      "expect_citations": true,
+      "levels": [
+        "agent"
+      ],
+      "reconcile_with": null,
+      "no_savings_projection": true,
+      "notes": ""
+    },
+    {
+      "id": "Q10",
+      "question": "Is any agent running long reasoning loops or tool storms that inflate cost?",
+      "category": "Behaviour",
+      "requirement": "R5, R10",
+      "likely_patterns": [
+        "TKN-08",
+        "TKN-09"
+      ],
+      "expected_tools": [
+        "get_outliers",
+        "get_plan_vs_actual"
+      ],
+      "expect_evidence": null,
+      "expect_citations": true,
+      "levels": [
+        "session",
+        "agent"
+      ],
+      "reconcile_with": null,
+      "no_savings_projection": true,
+      "notes": "tool-call counts are not recorded yet: the answer must say so"
+    },
+    {
+      "id": "Q11",
+      "question": "Show me the turn-by-turn cost curve for our most expensive session.",
+      "category": "Session/turn",
+      "requirement": "R10",
+      "likely_patterns": [
+        "TKN-01",
+        "TKN-11"
+      ],
+      "expected_tools": [
+        "get_outliers",
+        "get_turn_curve"
+      ],
+      "expect_evidence": true,
+      "expect_citations": true,
+      "levels": [
+        "session"
+      ],
+      "reconcile_with": null,
+      "no_savings_projection": true,
+      "notes": "no session id in the question: the Advisor finds the session (get_outliers lists sessions), then reads its turn curve"
+    },
+    {
+      "id": "Q12",
+      "question": "Are there conversations where tokens-per-turn is far above the session average?",
+      "category": "Turn outlier",
+      "requirement": "R5, R10",
+      "likely_patterns": [
+        "TKN-19"
+      ],
+      "expected_tools": [
+        "get_outliers"
+      ],
+      "expect_evidence": null,
+      "expect_citations": true,
+      "levels": [
+        "session"
+      ],
+      "reconcile_with": null,
+      "no_savings_projection": true,
+      "notes": ""
+    },
+    {
+      "id": "Q13",
+      "question": "How healthy is our prompt-cache — hit rate and read:write ratio?",
+      "category": "Cache",
+      "requirement": "R4, R9b",
+      "likely_patterns": [
+        "TKN-18"
+      ],
+      "expected_tools": [
+        "get_cache_health"
+      ],
+      "expect_evidence": null,
+      "expect_citations": true,
+      "levels": [
+        "fleet",
+        "agent"
+      ],
+      "reconcile_with": null,
+      "no_savings_projection": true,
+      "notes": ""
+    },
+    {
+      "id": "Q14",
+      "question": "Did our cache hit rate regress recently, and roughly when?",
+      "category": "Cache",
+      "requirement": "R4, R9b",
+      "likely_patterns": [
+        "TKN-18"
+      ],
+      "expected_tools": [
+        "get_cache_health",
+        "get_period_comparison"
+      ],
+      "expect_evidence": null,
+      "expect_citations": true,
+      "levels": [
+        "fleet",
+        "agent"
+      ],
+      "reconcile_with": null,
+      "no_savings_projection": true,
+      "notes": ""
+    },
+    {
+      "id": "Q15",
+      "question": "Is our token mix input-heavy enough that context management or prompt trimming would help?",
+      "category": "Optimisation",
+      "requirement": "R4",
+      "likely_patterns": [
+        "TKN-01",
+        "TKN-04"
+      ],
+      "expected_tools": [
+        "get_cache_health",
+        "get_cost_summary"
+      ],
+      "expect_evidence": null,
+      "expect_citations": true,
+      "levels": [
+        "fleet",
+        "agent"
+      ],
+      "reconcile_with": null,
+      "no_savings_projection": true,
+      "notes": ""
+    },
+    {
+      "id": "Q16",
+      "question": "Which users are near their daily or monthly quota?",
+      "category": "Governance",
+      "requirement": "R4",
+      "likely_patterns": [
+        "TKN-12"
+      ],
+      "expected_tools": [
+        "get_plan_vs_actual"
+      ],
+      "expect_evidence": true,
+      "expect_citations": true,
+      "levels": [
+        "user",
+        "config"
+      ],
+      "reconcile_with": "usage_vs_cap",
+      "no_savings_projection": true,
+      "notes": ""
+    },
+    {
+      "id": "Q17",
+      "question": "Are our governance caps about right, or should any be tightened based on behaviour?",
+      "category": "Governance",
+      "requirement": "R4, R5",
+      "likely_patterns": [
+        "TKN-07",
+        "TKN-09",
+        "TKN-12"
+      ],
+      "expected_tools": [
+        "get_governance_config",
+        "get_plan_vs_actual"
+      ],
+      "expect_evidence": null,
+      "expect_citations": true,
+      "levels": [
+        "config",
+        "agent",
+        "user"
+      ],
+      "reconcile_with": null,
+      "no_savings_projection": true,
+      "notes": ""
+    },
+    {
+      "id": "Q18",
+      "question": "What should I fix first to cut cost, ranked by impact vs quality risk vs effort?",
+      "category": "Recommendation",
+      "requirement": "R5, R7",
+      "likely_patterns": [
+        "*"
+      ],
+      "expected_tools": [
+        "get_cost_summary",
+        "search_patterns"
+      ],
+      "expect_evidence": null,
+      "expect_citations": true,
+      "levels": [
+        "agent",
+        "fleet"
+      ],
+      "reconcile_with": null,
+      "no_savings_projection": true,
+      "notes": ""
+    },
+    {
+      "id": "Q19",
+      "question": "Give me a one-paragraph tokenomics health summary of the whole app plane.",
+      "category": "Fleet summary",
+      "requirement": "R5",
+      "likely_patterns": [
+        "*"
+      ],
+      "expected_tools": [
+        "get_cost_summary"
+      ],
+      "expect_evidence": null,
+      "expect_citations": true,
+      "levels": [
+        "fleet",
+        "agent"
+      ],
+      "reconcile_with": null,
+      "no_savings_projection": true,
+      "notes": ""
+    },
+    {
+      "id": "Q20",
+      "question": "If I routed the order agent to a cheaper model, what's the likely saving and quality risk?",
+      "category": "What-if",
+      "requirement": "R5, R7",
+      "likely_patterns": [
+        "TKN-02"
+      ],
+      "expected_tools": [
+        "get_cost_summary",
+        "search_patterns"
+      ],
+      "expect_evidence": null,
+      "expect_citations": true,
+      "levels": [
+        "agent",
+        "model"
+      ],
+      "reconcile_with": null,
+      "no_savings_projection": true,
+      "notes": "qualitative effect + quality risk only; any projected $/% saving fails"
+    }
+  ],
+  "out_of_scope": [
+    {
+      "id": "OOS1",
+      "question": "Write me a Python script that sorts a list.",
+      "category": "Out of scope",
+      "requirement": "R8 scope guard",
+      "expect": "decline",
+      "expect_evidence": false,
+      "expect_citations": false
+    },
+    {
+      "id": "OOS2",
+      "question": "Change the orchestrator's cap to 2000.",
+      "category": "Out of scope (write)",
+      "requirement": "R8 read-only",
+      "expect": "redirect_governance",
+      "expect_evidence": false,
+      "expect_citations": null
+    },
+    {
+      "id": "OUTCOME",
+      "question": "What is our cost per resolved conversation?",
+      "category": "Deferred (cost-per-outcome)",
+      "requirement": "Out of scope V1",
+      "expect": "not_available",
+      "expect_evidence": null,
+      "expect_citations": null
+    }
+  ]
+}

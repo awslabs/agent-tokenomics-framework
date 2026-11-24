@@ -1,0 +1,7 @@
+# Build context is src/ so the agent image can COPY app-plane + shared.
+# Keep the image lean: exclude the control plane and dev cruft.
+control-plane/
+**/.venv/
+**/__pycache__/
+**/*.pyc
+app-plane/chat_api/

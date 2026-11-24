@@ -1,0 +1,55 @@
+{
+  "description": "Multi-turn support conversations. Each session is one ordered conversation; turns within a session share one session_id so short-term memory accumulates. Across the corpus the turns exercise all three agents (orchestrator routing + knowledge agent for policy/FAQ + order agent for order/shipping/subscription/refund). `user_id` is a synthetic benchmark identity (not a real Cognito user); the sliders max at 5 sessions x 5 turns, so the authored corpus is exactly 5 x 5.",
+  "sessions": [
+    {
+      "user_id": "bench-user-1",
+      "turns": [
+        { "message": "What is your return policy?" },
+        { "message": "How long do refunds usually take once I send an item back?" },
+        { "message": "And if I originally paid with a gift card, how is the refund issued?" },
+        { "message": "Where is my most recent order right now?" },
+        { "message": "Can you cancel that order if it hasn't shipped yet?" }
+      ]
+    },
+    {
+      "user_id": "bench-user-2",
+      "turns": [
+        { "message": "How long does standard shipping usually take?" },
+        { "message": "Can I change the delivery address on an order that is still processing?" },
+        { "message": "What happens if I'm not home when the package arrives?" },
+        { "message": "Do you offer a faster shipping option, and what does it cost?" },
+        { "message": "Is international shipping available to Canada?" }
+      ]
+    },
+    {
+      "user_id": "bench-user-3",
+      "turns": [
+        { "message": "How do I manage my subscription?" },
+        { "message": "Can I pause it for a couple of months instead of cancelling?" },
+        { "message": "What's your cancellation policy if I decide to cancel the subscription?" },
+        { "message": "Will I be refunded for the current billing period if I cancel now?" },
+        { "message": "How do I update the payment method on the subscription?" }
+      ]
+    },
+    {
+      "user_id": "bench-user-4",
+      "turns": [
+        { "message": "Do you price match if I find the item cheaper elsewhere?" },
+        { "message": "What's the status of my latest order?" },
+        { "message": "That order looks delayed - can I get a refund for the shipping cost?" },
+        { "message": "What is your policy on returning items bought on sale?" },
+        { "message": "If I return a sale item, do I get store credit or my money back?" }
+      ]
+    },
+    {
+      "user_id": "bench-user-5",
+      "turns": [
+        { "message": "I have a question about a warranty claim - what does the warranty cover?" },
+        { "message": "How do I start a warranty claim for a defective product?" },
+        { "message": "Can you check whether my recent order is still eligible for a return?" },
+        { "message": "If it's eligible, how do I generate a return shipping label?" },
+        { "message": "How long until I see the refund on my card after you receive the return?" }
+      ]
+    }
+  ]
+}
