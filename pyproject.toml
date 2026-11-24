@@ -1,0 +1,75 @@
+# Tooling config for the Python side of the Agent Tokenomics Framework.
+#
+# This is a reference solution: the lint/format/type setup is part of what we
+# ship, so a partner can run `make lint` and trust a green result. Ruff is the
+# linter + formatter; mypy is the type checker. Config is deliberately curated —
+# we enable real hygiene rules and opt OUT of the few that fight this codebase's
+# intentional, documented patterns (noted inline).
+
+[tool.ruff]
+# The app-plane + control-plane containers run on Python 3.12 (Lambda 3.12,
+# AgentCore image). Target it so pyupgrade rewrites match the runtime.
+target-version = "py312"
+line-length = 110
+# Hyphenated package dirs are an intentional deploy-layout choice
+# (src/app-plane, src/control-plane), not importable module names — exclude the
+# generated/vendored trees.
+extend-exclude = [
+    "infra/.venv",
+    "infra/cdk.out",
+    "**/__pycache__",
+]
+
+[tool.ruff.lint]
+# Curated rule set: import hygiene, pyflakes, pyupgrade, bugbear, comprehensions,
+# simplify, blind-except awareness, and a few refurb/ruff rules. We keep the set
+# tight and meaningful rather than enabling everything and drowning the signal.
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "BLE", "RUF"]
+ignore = [
+    # Hyphenated package directories (src/app-plane, src/control-plane) are an
+    # intentional deploy layout, not Python module names. Not renameable without
+    # churning every import + the CDK bundling paths.
+    "N999",
+    # Line length is enforced by the formatter, not the linter.
+    "E501",
+    # Ambiguous-unicode rules fire on intentional en-dashes/arrows in prose,
+    # docstrings and the advisor catalog data. Cosmetic, not a defect.
+    "RUF001", "RUF002", "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may use broad excepts and assert-style patterns freely.
+"tests/**" = ["BLE001", "B011"]
+# Lambda / AgentCore entrypoints and workers deliberately insert the code root
+# onto sys.path BEFORE importing first-party modules, so imports can't all sit at
+# the top of the file. This bootstrap is required by the runtime packaging, not a
+# style slip -- allow E402 in exactly these files.
+"src/control-plane/lambda_entry.py" = ["E402"]
+"src/control-plane/metering_consumer.py" = ["E402"]
+"src/control-plane/benchmarking/worker.py" = ["E402"]
+"src/control-plane/advisor/worker.py" = ["E402"]
+
+[tool.ruff.lint.isort]
+# First-party packages so import grouping is correct across both planes + shared.
+known-first-party = ["shared", "tokenomics", "agents", "handlers", "lib", "advisor", "config"]
+
+[tool.ruff.format]
+# Default (black-compatible) formatting; double quotes, trailing commas.
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+# ADVISORY, not a gate. The agent SDK (Strands) uses heavily overloaded
+# signatures (e.g. **kwargs splats into Agent.__call__, variant hook callbacks)
+# that mypy flags as type errors even when the usage is correct per the SDK's
+# own docs. Forcing a green mypy here would mean scattering `# type: ignore`
+# across every SDK call, which teaches worse than leaving them. So mypy is wired
+# as `make typecheck` for authors who want it, but it is NOT part of the blocking
+# `make lint` baseline. Ruff (lint+format) + eslint are the enforced gates.
+ignore_missing_imports = true
+warn_redundant_casts = true
+no_implicit_optional = true
+explicit_package_bases = true
+# The hyphenated source roots aren't importable package names; `make typecheck`
+# sets MYPYPATH per plane and runs with --explicit-package-bases.
+exclude = ['infra/\.venv', 'infra/cdk\.out']

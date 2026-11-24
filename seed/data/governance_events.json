@@ -1,0 +1,32 @@
+[
+  {
+    "ts": "2026-09-24T22:31:00+00:00",
+    "type": "limit_turns",
+    "config": "max_iterations",
+    "scope": "agent",
+    "severity": "high",
+    "user_id": "demo-order-loop",
+    "session_id": "sess-demo-8842",
+    "message": "Order agent hit the iteration cutoff (5 cycles) on a get_orders retry loop."
+  },
+  {
+    "ts": "2026-09-24T21:47:00+00:00",
+    "type": "tool_cap",
+    "config": "max_tool_calls",
+    "scope": "turn",
+    "severity": "medium",
+    "user_id": "demo-heavy-tools",
+    "session_id": "sess-demo-8720",
+    "message": "Orchestrator reached the 6-tool-call budget for the turn; answered with what it had."
+  },
+  {
+    "ts": "2026-09-24T19:03:00+00:00",
+    "type": "quota",
+    "config": "daily_max_tokens_per_user",
+    "scope": "user",
+    "severity": "high",
+    "user_id": "demo-heavy-user",
+    "session_id": "sess-demo-8611",
+    "message": "User exceeded the daily token quota; request blocked at the gateway (BUDGET_EXCEEDED)."
+  }
+]

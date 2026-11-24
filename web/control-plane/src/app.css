@@ -1,0 +1,81 @@
+/* App-level style overrides on top of Cloudscape. */
+
+/* Green "Refresh" button (Cloudscape has no green variant). Scoped to the
+   .refresh-green wrapper so it never affects other buttons. Targets the normal
+   button's background/border/text + its hover/active states. */
+.refresh-green button[class*="awsui_button"] {
+  background: #037f51 !important;
+  border-color: #037f51 !important;
+  color: #ffffff !important;
+}
+.refresh-green button[class*="awsui_button"]:hover {
+  background: #026945 !important;
+  border-color: #026945 !important;
+}
+.refresh-green button[class*="awsui_button"] * {
+  color: #ffffff !important;
+}
+
+/* Taller / more prominent benchmark progress bar. Scoped to .bench-progress so
+   no other Cloudscape ProgressBar is affected.
+
+   Cloudscape renders the bar as a native HTML <progress> element (class
+   awsui_progress*). The FILL is a browser pseudo-element whose width the
+   browser computes from value/max. To make the bar taller AND have the fill
+   reach the full width/height, the height must be set on the <progress>
+   element AND on its value pseudo-elements (::-webkit-progress-value /
+   ::-moz-progress-bar) + the track (::-webkit-progress-bar). We set height
+   only — never width — so the fill percentage stays correct and reaches 100%. */
+.bench-progress [class*="awsui_progress"] {
+  height: 14px !important;
+  border-radius: 7px !important;
+}
+.bench-progress [class*="awsui_progress"]::-webkit-progress-bar {
+  height: 14px !important;
+  border-radius: 7px !important;
+}
+.bench-progress [class*="awsui_progress"]::-webkit-progress-value {
+  height: 14px !important;
+  border-radius: 7px !important;
+}
+.bench-progress [class*="awsui_progress"]::-moz-progress-bar {
+  height: 14px !important;
+  border-radius: 7px !important;
+}
+.bench-progress [class*="awsui_label"] {
+  font-size: 1.1rem !important;
+  font-weight: 700 !important;
+}
+.bench-progress [class*="awsui_description"],
+.bench-progress [class*="awsui_additional-info"] {
+  font-size: 0.95rem !important;
+}
+
+/* Feature-flags page: one list row per tokenomics pattern (name + description on
+   the left, toggle/status on the right; an optional tunable below). The divider
+   is a top border on every row except the first (via :first-child), so the row
+   helper needs no per-row style. */
+.tk-flags-list .tk-flag-row {
+  padding: 16px 4px;
+  border-top: 1px solid #e9ebed;
+}
+.tk-flags-list .tk-flag-row:first-child {
+  border-top: none;
+}
+.tk-flag-row__main {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.tk-flag-row__body {
+  flex: 1;
+  min-width: 0;
+}
+.tk-flag-row__control {
+  flex-shrink: 0;
+  text-align: right;
+  min-width: 110px;
+}
+.tk-flag-row__extra {
+  margin-top: 10px;
+}

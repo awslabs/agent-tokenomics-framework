@@ -1,0 +1,29 @@
+{
+  "agents": {
+    "orchestrator": {
+      "max_output_tokens_per_model_call": 4000,
+      "max_tool_calls": 6,
+      "max_iterations": 8,
+      "max_tokens_per_agent_call": 60000
+    },
+    "knowledge": {
+      "max_output_tokens_per_model_call": 2000,
+      "max_tool_calls": 4,
+      "max_iterations": 5,
+      "max_tokens_per_agent_call": 40000
+    },
+    "order": {
+      "max_output_tokens_per_model_call": 2000,
+      "max_tool_calls": 5,
+      "max_iterations": 5,
+      "max_tokens_per_agent_call": 50000
+    }
+  },
+  "session_max_tokens": 150000,
+  "user_default": {
+    "daily_max_tokens_per_user": 200000,
+    "monthly_max_tokens_per_user": 4000000,
+    "max_tokens_per_minute_per_user": 40000
+  },
+  "user_overrides": {}
+}

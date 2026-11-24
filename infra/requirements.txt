@@ -1,0 +1,9 @@
+# CDK v2. S3BucketOrigin.with_origin_access_control (OAC) needs a recent lib.
+aws-cdk-lib>=2.273.0
+constructs>=10.0.0
+# Used by the seed scripts (seeding runs on this same venv).
+boto3>=1.35.0
+# Lint + format + (advisory) type check. This is a reference solution, so the
+# tooling ships with it -- `make lint` runs ruff from this venv. See pyproject.toml.
+ruff>=0.17.0
+mypy>=1.11.0
