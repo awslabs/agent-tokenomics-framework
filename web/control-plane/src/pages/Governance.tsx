@@ -18,13 +18,13 @@ import BarChart from "@cloudscape-design/components/bar-chart";
 import Pagination from "@cloudscape-design/components/pagination";
 import { useEffect } from "react";
 import { useHelp } from "../help";
-import { api, AgentLimits as ApiAgentLimits, AuditEntry, GovAnalytics } from "../api";
+import { api, AgentLimits as ApiAgentLimits, GovAnalytics } from "../api";
 import { useRole } from "../role";
 
 /**
  * Governance page — wired to the control-plane API:
- *   GET/PUT /governance/config, GET /governance/analytics, GET /governance/events,
- *   GET /governance/audit (change history; threat model M16).
+ *   GET/PUT /governance/config, GET /governance/analytics, GET /governance/events.
+ *   (The change history lives on the Activity log page: pages/ActivityLog.tsx.)
  *
  * Locked config (9 fields):
  *  per-agent (x3): max_output_tokens_per_model_call, max_tool_calls,
@@ -528,19 +528,6 @@ export default function Governance() {
   const [flash, setFlash] = useState<FlashbarProps.MessageDefinition[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // change history (GET /governance/audit): who changed what, newest first
-  const [audit, setAudit] = useState<AuditEntry[]>([]);
-  const [auditLoading, setAuditLoading] = useState(true);
-  function loadAudit() {
-    setAuditLoading(true);
-    api
-      .getAudit()
-      .then((r) => setAudit(r.entries))
-      .catch((e) => setError((e as Error).message))
-      .finally(() => setAuditLoading(false));
-  }
-  useEffect(loadAudit, []);
-
   // analytics state (loaded from GET /governance/analytics)
   const [analytics, setAnalytics] = useState<GovAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -616,7 +603,6 @@ export default function Governance() {
           id: "saved",
         },
       ]);
-      loadAudit();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -1251,44 +1237,6 @@ export default function Governance() {
           )}
         </SpaceBetween>
       </Container>
-
-      {/* ============ CHANGE HISTORY (audit trail) ============ */}
-      <Table
-        variant="container"
-        loading={auditLoading}
-        loadingText="Loading change history"
-        items={audit}
-        header={
-          <Header
-            variant="h2"
-            description="Every change to flags, usage plans and overrides, and every benchmark start: who, when, before and after."
-            actions={
-              <Button iconName="refresh" loading={auditLoading} onClick={loadAudit}>
-                Refresh
-              </Button>
-            }
-          >
-            Change history
-          </Header>
-        }
-        empty={<Box color="text-body-secondary">No changes recorded yet.</Box>}
-        columnDefinitions={[
-          { id: "ts", header: "Time", cell: (e) => e.ts, width: 230 },
-          { id: "who", header: "Changed by", cell: (e) => e.actor_email || e.actor_sub },
-          { id: "action", header: "Change", cell: (e) => <code>{e.action}</code> },
-          {
-            id: "after",
-            header: "New value",
-            cell: (e) => (
-              <Box fontSize="body-s">
-                <code style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-                  {JSON.stringify(e.after)}
-                </code>
-              </Box>
-            ),
-          },
-        ]}
-      />
     </SpaceBetween>
   );
 }
