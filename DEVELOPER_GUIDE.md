@@ -20,6 +20,7 @@
    - [4.7 Control-plane API model](#47-control-plane-api-model)
    - [4.8 Advisor](#48-advisor)
    - [4.9 User management](#49-user-management)
+   - [4.10 Activity log](#410-activity-log)
 5. [Cross-plane integration](#5-cross-plane-integration)
    - [5.1 The shared config contract (sync)](#51-the-shared-config-contract-sync)
    - [5.2 The EventBridge contract (async)](#52-the-eventbridge-contract-async)
@@ -1906,13 +1907,13 @@ flowchart TD
 
 ### 4.6 Front-end (admin SPA)
 
-`web/control-plane/` is a React + Cloudscape SPA with five pages and hash routing (analytics is
+`web/control-plane/` is a React + Cloudscape SPA with six pages and hash routing (analytics is
 the default/home page). It uses the Cloudscape `AppLayout` with a Help drawer.
 
 `web/control-plane/src/App.tsx`
 ```typescript
-type Page = "analytics" | "advisor" | "flags" | "benchmarks" | "governance";
-const PAGES: Page[] = ["analytics", "advisor", "flags", "benchmarks", "governance"];
+type Page = "analytics" | "advisor" | "flags" | "benchmarks" | "governance" | "activity";
+const PAGES: Page[] = ["analytics", "advisor", "flags", "benchmarks", "governance", "activity"];
 const DEFAULT_PAGE: Page = "analytics";
 
 function parseHash(): Page {
@@ -1921,9 +1922,10 @@ function parseHash(): Page {
 }
 ```
 
-The five pages map 1:1 to control-plane concerns: `TokenomicsAnalytics` (§4.2),
+The six pages map 1:1 to control-plane concerns: `TokenomicsAnalytics` (§4.2),
 `Advisor` (§4.8; `#advisor/<chat_id>` opens one chat),
-`Governance` (§4.5), `Flags` (§4.3), `Benchmarks` (§4.4). All call the admin API through
+`Governance` (§4.5), `Flags` (§4.3), `Benchmarks` (§4.4), `ActivityLog` (§4.9, the audit
+trail: one "old → new" line per change, raw before/after per row). All call the admin API through
 `src/api.ts` with the admin Cognito JWT. The API Gateway CORS and the SPA's `VITE_API_BASE`
 are both scoped to the admin CloudFront origin by the deploy script.
 
@@ -1953,7 +1955,7 @@ CloudWatch (`infra/stacks/api_access_logs.py`).
 | PUT | `/governance/user-override` | `governance_handler.put_user_override` | per-user caps (DORMANT) |
 | GET | `/governance/analytics?user=&window=` | `governance_handler.analytics` | plan-vs-actual, top spenders |
 | GET | `/governance/events?user=&window=&config=` | `governance_handler.events` | enforcement event log |
-| GET | `/governance/audit?limit=` | `audit.list_entries` | change history, newest first |
+| GET | `/governance/audit?limit=` | `audit.list_entries` | Activity log entries, newest first |
 | GET | `/me` | inline | the caller's groups + whether they may change config |
 | GET | `/benchmarks` | `benchmarks_handler.list_benchmarks` | list runs |
 | POST | `/benchmarks` | `benchmarks_handler.start_benchmark` | start a run (returns **202**) |
@@ -2087,8 +2089,8 @@ policy and optional threat protection as the app plane (`infra/stacks/auth_polic
 | neither | `403` |
 
 A group change takes effect at the user's next sign-in. Every change is recorded in an
-append-only audit trail (who, when, before/after), shown as **Change history** on the Governance
-page.
+append-only audit trail (who, when, before/after), shown on the **Activity log** page
+(`web/control-plane/src/pages/ActivityLog.tsx`).
 
 **Demo admin.** `scripts/deploy-control.sh` creates `admin@example.com` in `governance-admin`
 with `ensure_cognito_user` (`scripts/common/common.sh`), using the Admin UI password that
@@ -2098,6 +2100,82 @@ data. Password handling is the same as §3.7; for non-interactive runs, preset
 
 **Add a read-only user.** Create the user in the admin pool in Cognito and add it to the
 `viewer` group.
+
+### 4.10 Activity log
+
+The Activity log page answers "who changed which token control, and when?". It is the
+admin-facing view of the control-plane audit trail (threat model M16): every change that can
+alter token spend writes one append-only record, and the page reads them back.
+
+#### What is recorded
+
+| Route | Type on the page | What changes |
+|-------|------------------|--------------|
+| `PUT /flags` | Feature flags | feature toggles and their params (§4.3) |
+| `PUT /governance/config` | Usage plans | per-agent caps, session cap, per-user quota (§4.5) |
+| `PUT /governance/user-override` | User override | one user's quota (dormant, §4.5) |
+| `POST /benchmarks` | Benchmark | a benchmark start: it spends Bedrock tokens and runs with no caps (§4.4) |
+
+Reads (`GET`) and Advisor chats are not recorded; the API Gateway access logs cover per-request
+attribution (`infra/stacks/api_access_logs.py`).
+
+#### Architecture
+
+```mermaid
+sequenceDiagram
+    participant Admin as Admin SPA
+    participant API as Control-plane API (Lambda)
+    participant Store as Config store (Flags / UsagePlans / Benchmarks)
+    participant Audit as GovernanceAudit (DynamoDB)
+    Admin->>API: PUT /flags (JWT)
+    API->>API: authz.require_write (governance-admin)
+    API->>Store: read "before"
+    API->>Store: apply change -> "after"
+    API->>Audit: PutItem {who, when, route, before, after}
+    API-->>Admin: 200 (new config)
+    Note over Admin,Audit: Activity log page
+    Admin->>API: GET /governance/audit?limit=200
+    API->>API: authz.require_read (viewer or governance-admin)
+    API->>Audit: Query pk=AUDIT, newest first
+    API-->>Admin: entries
+```
+
+1. **One chokepoint.** Every audited route goes through `_change()` in
+   `src/control-plane/lambda_entry.py`: it checks the `governance-admin` role, reads the config
+   *before*, applies the change, then calls `audit.record()` with the result as *after*. If the
+   audit write fails, the request returns `500` and the error goes to CloudWatch. The change itself
+   is already applied at that point, so a failed audit write shows up as a 500 on a save.
+2. **The record** (`src/control-plane/lib/audit.py`): `actor_sub` and `actor_email` from the
+   verified JWT, `ts`, `action` (the route), `before`, `after`.
+3. **The table** `GovernanceAudit` (`infra/stacks/control_plane_stack.py`): one partition
+   `pk = "AUDIT"` (admin change volume is tiny) and `sk = "<ISO ts>#<uuid>"`, so a descending
+   query returns newest first. Point-in-time recovery is on.
+4. **Append-only.** The API role gets only `dynamodb:PutItem` and `dynamodb:Query` on the table
+   (no `UpdateItem` or `DeleteItem`), and `audit.record()` writes with
+   `attribute_not_exists(sk)`, so it never overwrites an existing record.
+5. **Read path.** `GET /governance/audit?limit=` returns up to 500 entries (default 100); any
+   `viewer` or `governance-admin` can read it.
+
+#### The page
+
+`web/control-plane/src/pages/ActivityLog.tsx`, nav item **Activity log** (`#activity`). It loads
+the newest 200 entries and shows:
+
+| Column | Source |
+|--------|--------|
+| Time | `ts` |
+| Changed by | `actor_email` (else `actor_sub`) |
+| Type | badge from `action` (table above) |
+| Detail | one line built in the browser from `before` / `after` |
+
+The Detail line diffs the flattened before/after config and lists only the leaves that changed,
+up to 3 then "+N more", for example `Prompt cache: OFF → ON` or
+`Orchestrator · Max tool calls: 6 → 1`. A benchmark start shows its name, A vs B flag sets and
+size, for example `benchmark-… · A: memory vs B: prompt cache + memory · 2 sessions × 2 turns`.
+Each row expands to the raw before/after JSON. A Type filter and 20-row paging are client-side.
+
+**Extending it.** A new admin write route is audited by wrapping it in `_change()`; add its route
+to `TYPES` in `ActivityLog.tsx` so it gets a badge and appears in the filter.
 
 ---
 

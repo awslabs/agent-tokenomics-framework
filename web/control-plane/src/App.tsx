@@ -11,14 +11,15 @@ import Benchmarks from "./pages/Benchmarks";
 import Governance from "./pages/Governance";
 import Advisor, { ADVISOR_HELP } from "./pages/Advisor";
 import TokenomicsAnalytics from "./pages/TokenomicsAnalytics";
+import ActivityLog from "./pages/ActivityLog";
 import LoginPage from "./LoginPage";
 import { currentEmail, getIdToken, logout } from "./auth";
 import { HelpContext, type HelpContent } from "./help";
 import { api } from "./api";
 import { RoleContext } from "./role";
 
-type Page = "analytics" | "advisor" | "flags" | "benchmarks" | "governance";
-const PAGES: Page[] = ["analytics", "advisor", "flags", "benchmarks", "governance"];
+type Page = "analytics" | "advisor" | "flags" | "benchmarks" | "governance" | "activity";
+const PAGES: Page[] = ["analytics", "advisor", "flags", "benchmarks", "governance", "activity"];
 // The analytics page is the default/home page (loaded on no/unknown hash).
 const DEFAULT_PAGE: Page = "analytics";
 
@@ -28,6 +29,7 @@ const PAGE_TITLE: Record<Page, string> = {
   flags: "Feature flags",
   benchmarks: "Benchmarks",
   governance: "Token governance",
+  activity: "Activity log",
 };
 
 const PAGE_DESC: Record<Page, string> = {
@@ -36,6 +38,7 @@ const PAGE_DESC: Record<Page, string> = {
   flags: "Toggle tokenomics features and prove the savings with before/after benchmarks.",
   benchmarks: "Run before/after benchmarks and compare cost across flag configurations.",
   governance: "Set the token limits the running agent enforces in-loop, and watch them work.",
+  activity: "Who changed which token controls, and when — the audit trail of admin actions.",
 };
 
 function parseHash(): Page {
@@ -163,6 +166,7 @@ export default function App() {
                 { type: "link", text: "Advisor", href: advisorHref },
                 { type: "link", text: "Feature flags", href: "#flags" },
                 { type: "link", text: "Benchmarking", href: "#benchmarks" },
+                { type: "link", text: "Activity log", href: "#activity" },
               ]}
             />
           }
@@ -202,6 +206,8 @@ export default function App() {
                     <Governance />
                   ) : page === "flags" ? (
                     <Flags />
+                  ) : page === "activity" ? (
+                    <ActivityLog />
                   ) : (
                     <Benchmarks />
                   )}
