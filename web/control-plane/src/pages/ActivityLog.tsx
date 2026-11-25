@@ -37,14 +37,21 @@ const MAX_DETAIL_ITEMS = 3;
 
 const prettyLabel = (key: string) => key.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 
-/** Flatten nested config into dotted leaf paths, e.g. {"agents.order.max_tool_calls": 3}. */
-function flattenLeaves(v: unknown, prefix = "", out: Record<string, unknown> = {}): Record<string, unknown> {
+type Leaf = { path: string[]; value: unknown };
+
+/** Flatten nested config into leaf key paths, e.g. ["agents", "order", "max_tool_calls"] -> 3.
+ *  Paths stay arrays so keys that contain dots (e.g. emails) are never split. */
+function flattenLeaves(
+  v: unknown,
+  path: string[] = [],
+  out: Map<string, Leaf> = new Map(),
+): Map<string, Leaf> {
   if (v && typeof v === "object" && !Array.isArray(v)) {
     for (const [k, child] of Object.entries(v as Record<string, unknown>)) {
-      flattenLeaves(child, prefix ? `${prefix}.${k}` : k, out);
+      flattenLeaves(child, [...path, k], out);
     }
-  } else if (prefix) {
-    out[prefix] = v;
+  } else if (path.length) {
+    out.set(JSON.stringify(path), { path, value: v });
   }
   return out;
 }
@@ -52,13 +59,26 @@ function flattenLeaves(v: unknown, prefix = "", out: Record<string, unknown> = {
 // Container keys that add nothing to a label: "agents.order.max_tool_calls" -> "Order · Max tool calls".
 const LABEL_SKIP = new Set(["agents", "user_default", "user_overrides", "params"]);
 
-function changeLabel(path: string): { label: string; isToggle: boolean } {
-  const parts = path.split(".").filter((p) => !LABEL_SKIP.has(p));
+/** Email recorded on a per-user override (keyed by Cognito sub), from after or, if removed, before. */
+function overrideEmail(sub: string, before: unknown, after: unknown): string | undefined {
+  for (const cfg of [after, before]) {
+    const o = (cfg as { user_overrides?: Record<string, { email?: unknown }> } | null)?.user_overrides?.[sub];
+    if (typeof o?.email === "string" && o.email) return o.email;
+  }
+  return undefined;
+}
+
+function changeLabel(path: string[], before: unknown, after: unknown): { label: string; isToggle: boolean } {
+  // user_overrides.<sub>.<field>: show the user's email instead of the opaque sub.
+  const parts =
+    path[0] === "user_overrides" && path.length > 2
+      ? [overrideEmail(path[1], before, after) ?? path[1], ...path.slice(2)]
+      : path.filter((p) => !LABEL_SKIP.has(p));
   const isToggle = parts[parts.length - 1] === "enabled";
   if (isToggle) parts.pop();
-  const last = parts.pop() ?? path;
-  // Keep ids such as user emails as-is; prettify config keys.
-  const prefix = parts.map((p) => (p.includes("@") ? p : prettyLabel(p)));
+  const last = parts.pop() ?? path.join(".");
+  // Keep ids such as user emails / subs as-is; prettify config keys.
+  const prefix = parts.map((p, i) => (path[0] === "user_overrides" && i === 0 ? p : prettyLabel(p)));
   return { label: [...prefix, prettyLabel(last)].join(" · "), isToggle };
 }
 
@@ -74,10 +94,13 @@ function describeConfigChange(before: unknown, after: unknown): string {
   const b = flattenLeaves(before);
   const a = flattenLeaves(after);
   const changes: string[] = [];
-  for (const path of new Set([...Object.keys(b), ...Object.keys(a)])) {
-    if (path.endsWith(".email") || JSON.stringify(b[path]) === JSON.stringify(a[path])) continue;
-    const { label, isToggle } = changeLabel(path);
-    changes.push(`${label}: ${changeValue(b[path], isToggle)} → ${changeValue(a[path], isToggle)}`);
+  for (const key of new Set([...b.keys(), ...a.keys()])) {
+    const path = (a.get(key) ?? b.get(key))!.path;
+    const bv = b.get(key)?.value;
+    const av = a.get(key)?.value;
+    if (path[path.length - 1] === "email" || JSON.stringify(bv) === JSON.stringify(av)) continue;
+    const { label, isToggle } = changeLabel(path, before, after);
+    changes.push(`${label}: ${changeValue(bv, isToggle)} → ${changeValue(av, isToggle)}`);
   }
   if (changes.length === 0) return "No effective change";
   const extra = changes.length - MAX_DETAIL_ITEMS;
