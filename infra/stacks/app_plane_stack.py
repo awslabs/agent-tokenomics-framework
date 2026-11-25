@@ -1,7 +1,7 @@
 """AppPlaneStack -- the support agent + everything the app plane owns.
 
 Owns:
-  - Auth: a Cognito user pool (self sign-up, custom:tier) + SPA client. User
+  - Auth: a Cognito user pool (self sign-up off, custom:tier) + SPA client. User
     profile lives in Cognito; there is no Customers table.
   - Its business data: Orders / Faq (DynamoDB). Orders are keyed by the user's
     Cognito `sub`.
@@ -83,7 +83,8 @@ class AppPlaneStack(Stack):
             self,
             "UserPool",
             user_pool_name="Tokenomics-app-plane",
-            # Self sign-up is disabled; customers are provisioned by the seed.
+            # Self sign-up is disabled; customers are provisioned by the deploy
+            # script (scripts/deploy-app-plane.sh).
             # TODO: re-enable (set True) only once the pool has protections for
             # open self sign-up in place (e.g. threat protection / WAF), and
             # restore the register entry point in the chat SPA (SELF_SIGNUP_ENABLED).

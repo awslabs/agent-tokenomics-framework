@@ -77,14 +77,26 @@ wait_advisor_kb_ingestion () {
 }
 wait_advisor_kb_ingestion
 
-# Seed the demo admin user + token-governance tables (idempotent).
-# Governance table names come from stack outputs; the app-plane pool id lets the
-# seed resolve a demo customer's `sub` for a per-user quota override (demo lever).
-echo "[deploy-control-plane] seeding admin user + governance..."
+# Create the Admin UI user (Cognito; self sign-up is off) with the admin password
+# scripts/deploy-all.sh asked for, in the governance-admin group (may change
+# config; threat model M14). With no password, an existing admin keeps theirs.
+ADMIN_EMAIL="admin@example.com"
+ADMIN_GROUP="governance-admin"
+ADMIN_PW="${TOKENOMICS_ADMIN_PASSWORD:-}"
+echo "[deploy-control-plane] creating admin user: $ADMIN_EMAIL ($ADMIN_GROUP)"
+STATE="$(ensure_cognito_user "$REGION" "$ADMIN_POOL_ID" "$ADMIN_EMAIL" "$ADMIN_PW" "$ADMIN_GROUP")"
+if [ "$STATE" = "exists" ]; then
+  [ -n "$ADMIN_PW" ] && STATE="exists, password updated" || STATE="exists, password kept"
+fi
+echo "  $ADMIN_EMAIL: $STATE"
+
+# Seed the token-governance tables (idempotent). Table names come from stack
+# outputs; the app-plane pool id is accepted for the future per-user override.
+echo "[deploy-control-plane] seeding governance..."
 USAGE_PLANS_TABLE="$(output UsagePlansTableName)"
 METRICS_TABLE="$(output MetricsTableName)"
 APP_USER_POOL_ID="$(cfn_output "$REGION" Tokenomics-AppPlane UserPoolId)"
-"$PYBIN" "$ROOT/seed/load_control_plane.py" --region "$REGION" --user-pool-id "$ADMIN_POOL_ID" \
+"$PYBIN" "$ROOT/seed/load_control_plane.py" --region "$REGION" \
   ${USAGE_PLANS_TABLE:+--usage-plans-table "$USAGE_PLANS_TABLE"} \
   ${METRICS_TABLE:+--metrics-table "$METRICS_TABLE"} \
   ${APP_USER_POOL_ID:+--app-user-pool-id "$APP_USER_POOL_ID"}
@@ -95,5 +107,5 @@ echo
 echo "[deploy-control-plane] Done."
 echo "  Admin API:   $API"
 echo "  Admin UI:    $WEB_URL"
-echo "  Admin login: admin@example.com  (see seed/load_control_plane.py)"
+echo "  Admin login: $ADMIN_EMAIL"
 echo "  (Chat UI is deployed by scripts/deploy-app-plane.sh)"

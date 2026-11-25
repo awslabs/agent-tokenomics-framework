@@ -20,75 +20,16 @@ This reference solution answers all three by managing token cost across its whol
 
 ---
 
-## The Two Planes
+## High-Level Architecture
+
+The solution has two planes:
 
 - **Application plane** — a **customer-support agent** (orchestrator + 2 specialists, Strands, hosted on AgentCore Runtime) standing in for a production workload. Deliberately complex: multi-turn loops, delegation, redundant tool lookups, and a large stable system prompt so every technique has something to act on.
+  - **Users:** end customers (e-commerce shoppers). They sign in to the chat UI and send free-form support questions.
 - **Tokenomics control plane** — a serverless app (React + Cloudscape on S3/CloudFront, API Gateway + Lambda, DynamoDB) where an admin **sees cost**, **sets usage plans**, **toggles each tokenomics feature on/off**, and **runs before/after benchmarks**.
-
-### Two audiences
-
-| Audience | Interface | What they do |
-|----------|-----------|--------------|
-| **End customer** (e-commerce shopper) | Real chat UI | Signs in (Cognito), then sends free-form support questions; identity comes from the JWT (`sub`). |
-| **Admin / operator** (business or AWS partner) | Control plane | Signs in to a separate admin pool; sets usage plans, toggles features, watches cost, runs benchmarks. |
+  - **Users:** admins and operators (business owners or AWS partners). They sign in to the admin UI with a separate account.
 
 Benchmarking is separate from the chat: real conversations happen in the chat UI; benchmarks are driven through the API by a load generator that simulates many bulk conversations.
-
----
-
-## Authentication
-
-Both planes are gated by **Amazon Cognito**, with a **separate user pool per audience** (customers and operators are distinct populations):
-
-| Plane | Pool | Self sign-up | UI |
-|-------|------|--------------|----|
-| **App** (customer chat) | `Tokenomics-app-plane` | **Off (for now)** — customers are provisioned via the seed; tier (`prime`/`basic`) is stored in `custom:tier`. Self sign-up is temporarily disabled (see note) | Custom login SPA |
-| **Control** (admin) | `Tokenomics-control-plane` | **Off** — operators are provisioned, not self-served | Custom login SPA (no register) |
-
-Both APIs sit behind a Cognito authorizer; unauthenticated requests get `401`. The customer's identity (Cognito `sub`) is the canonical `user_id` — it keys their Orders and their per-conversation session. There is no separate customers table: the user profile (name, email, tier) lives in Cognito and is forwarded to the agent via JWT claims.
-
-Seeded demo users are listed below. **Note:** customer self-registration is temporarily disabled — AWS's automated abuse mitigation force-disables open Cognito self sign-up on this account, so customers are provisioned via the seed rather than self-registering. The register flow remains in the code (behind a flag) and can be re-enabled once the pool has the protections AWS requires.
-
----
-
-## Demo Users
-
-Seeded automatically by the deploy scripts. **No passwords are committed, generated or printed.** Set the password variables below before you deploy. A user is created only when its variable is set; otherwise the seed skips that user and prints a warning naming the variable to set, so set it and re-run the deploy. Re-deploys never reset an existing user's password unless the variable is set (and when it is set, the existing user's password is changed to it). Pools require 12+ characters with upper, lower, digit and symbol.
-
-| Pool | Users | Password variable | Required |
-|------|-------|-------------------|----------|
-| App plane (customers) | demo customers in `seed/data/users.json` (all share this password) | `TOKENOMICS_USER_PASSWORD` | Yes |
-| Control plane (admins) | `admin@example.com` (`governance-admin`) | `TOKENOMICS_ADMIN_PASSWORD` | Yes |
-| Control plane (admins) | optional read-only user from `--viewer-email` (`viewer`) | `TOKENOMICS_VIEWER_PASSWORD` | Only with `--viewer-email` |
-
-```bash
-export TOKENOMICS_ADMIN_PASSWORD='<your strong password>'
-export TOKENOMICS_USER_PASSWORD='<your strong password>'
-./scripts/deploy-all.sh
-```
-
-> **Upgrading an existing deployment:** older versions seeded fixed demo passwords that are publicly known. Re-deploy with the variables above set (or reset the passwords in Cognito), or delete the demo users.
-
-Optional: enable Cognito threat protection (compromised-credential detection, adaptive authentication) on both pools by setting `"cognitoThreatProtection": true` under `context` in `infra/cdk.json` (or `-c cognitoThreatProtection=true` on a direct `cdk deploy`). It uses the Cognito PLUS feature plan, billed per monthly active user, so it is off by default. Recommended for any non-throwaway deployment.
-
-### App plane — Chat UI (customers)
-
-Pool `Tokenomics-app-plane`. Source: [`seed/data/users.json`](seed/data/users.json).
-
-| Email | Tier | Has orders |
-|-------|------|------------|
-| `bob@example.com` | prime | Yes (2) |
-| `eva@example.com` | basic | Yes (2) |
-
-### Control plane — Admin UI (operators)
-
-Pool `Tokenomics-control-plane` (self sign-up disabled — provisioned by the deploy script). Source: `seed/load_control_plane.py`.
-
-| Email | Role |
-|-------|------|
-| `admin@example.com` | `governance-admin` — may change flags, usage plans and overrides, and run benchmarks |
-
-Control-plane access is role-based (Cognito groups in the admin pool): `governance-admin` can read and change everything; `viewer` is read-only; a user in neither group gets `403`. Every change is recorded in an append-only audit trail (who, when, before/after), shown as **Change history** on the Governance page. To add a read-only user, set `TOKENOMICS_VIEWER_PASSWORD` and pass `--viewer-email` to `seed/load_control_plane.py`, or add the user to the `viewer` group in Cognito. A group change takes effect at the user's next sign-in.
 
 ---
 
@@ -108,9 +49,9 @@ End customer ──chat──► Support agent (Strands on AgentCore) ──tele
 
 ---
 
-## V1 Features
+## Features
 
-The techniques prioritised for V1, across the three pillars (memory added after the original seven):
+The techniques included, across the three pillars:
 
 | # | Feature | Pillar |
 |---|---------|--------|
@@ -190,7 +131,21 @@ Start with the **[current architecture](docs/architecture/architecture.md)** —
 
 ## Development Setup
 
-### Prerequisites
+### 1. Logins (demo users)
+
+Both UIs require sign-in. The deploy creates these users and asks you for two
+passwords at the start (12+ characters with an uppercase letter, a lowercase
+letter, a digit and a symbol):
+
+| UI | Users | Password |
+|----|-------|----------|
+| Chat UI | `bob@example.com` (prime tier), `eva@example.com` (basic tier) | the Chat UI password you enter |
+| Admin UI | `admin@example.com` | the Admin UI password you enter |
+
+Forgot a password? Re-run `./scripts/deploy-all.sh` and enter new ones. User
+pools, roles and adding users: [Developer Guide §3.7 and §4.9](DEVELOPER_GUIDE.md#37-user-management).
+
+### 2. Prerequisites
 
 | Tool | Why | Install |
 |------|-----|---------|
@@ -200,59 +155,41 @@ Start with the **[current architecture](docs/architecture/architecture.md)** —
 | **Docker** (or Finch/Podman) | Builds the ARM64 agent container image | [docker.com](https://www.docker.com/) |
 
 Also do two things yourself before deploying:
+
 1. **Authenticate the AWS CLI** — `aws configure` (or set `AWS_PROFILE`).
 2. **Enable Amazon Bedrock model access** for Claude Sonnet 5.5, Claude Haiku
    5.5, and Amazon Nova Lite **in the region you deploy to** — the agent fails
    at invoke time without it. Sonnet 5.5 is reached via the Global cross-Region
    inference profile. `deploy-all.sh` reminds you which region that is.
 
-### Deploy
+### 3. Deploy
 
 One command, run from the repo root — sets up the environment and deploys both
 planes end to end:
 
 ```bash
-bash scripts/deploy-all.sh          # prompts for region (default us-west-2)
+bash scripts/deploy-all.sh          # prompts for region + the two login passwords
 ```
 
-It checks your tools, picks + saves the region, creates the CDK virtualenv,
-installs the SPA deps, then runs the two deploy stages for you. When it finishes
-it prints the chat UI, admin UI, and API URLs.
+It checks your tools, picks + saves the region, asks for the login passwords
+(see 1), creates the CDK virtualenv, installs the SPA deps, then runs the two
+deploy stages for you. When it finishes it prints the Chat UI and Admin UI URLs
+with their logins. It verifies each prerequisite above and stops with a clear
+fix hint if one is missing or too old; it never auto-installs system tools.
 
-To run a stage on its own instead (e.g. redeploy just one plane), the region
-from the first run is saved to `infra/.deploy-region` and reused:
+### 4. Redeploy one plane (optional)
+
+The region from the first run is saved to `infra/.deploy-region` and reused:
 
 ```bash
 bash scripts/deploy-app-plane.sh    # Data + AgentCore Runtime (agent image) + chat UI + seed
 bash scripts/deploy-control.sh      # admin API (API Gateway + Lambda) + admin UI + seed
 ```
 
-Each deploy script builds its SPA, deploys the CDK stacks, and prints its URLs
-(chat UI, admin UI, APIs) when done. `deploy-all.sh` verifies each prerequisite
-above and stops with a clear fix hint if one is missing or too
-old; it never auto-installs system tools.
+Each script builds its SPA, deploys the CDK stacks, and prints its URLs (chat
+UI, admin UI, APIs) when done.
 
 See the **[architecture](docs/architecture/architecture.md)** for stack-level details.
-
----
-
-## Status
-
-**Phase: V1 cloud build.** Fully deployed on AWS via CDK/CloudFormation:
-
-- **App plane** — the Strands support agent on Amazon Bedrock AgentCore Runtime,
-  its business data (Orders/Faq) in DynamoDB, customer identity + profile in a
-  Cognito user pool, short-term conversation memory in AgentCore Memory (flag-
-  gated), and the customer chat UI (S3/CloudFront) calling the agent through a
-  thin, JWT-authorized app-plane chat API.
-- **Control plane** — the admin API (API Gateway + Lambda, behind a dedicated
-  admin Cognito pool) for feature flags and benchmarks, benchmark-run state in
-  DynamoDB, and the admin UI (S3/CloudFront).
-- **Data** — the shared feature-flags table (written by the control plane, read
-  by the agent).
-
-CDK owns every resource, including the AgentCore Runtime (built from the
-Dockerfile via the `aws_bedrockagentcore.Runtime` construct).
 
 ---
 
@@ -290,13 +227,3 @@ bash tests/benchmarking/test-benchmarking.sh   # sends 12 short real agent turns
 
 See [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) §5 for what each layer covers and the
 prerequisites.
-
----
-
-## Related AWS Resources
-
-- [Amazon Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agents-tools-runtime.html)
-- [Amazon Bedrock Prompt Caching](https://aws.amazon.com/bedrock/prompt-caching/)
-- [Strands Agents SDK](https://strandsagents.com)
-- [AWS Well-Architected Agentic AI Lens — Cost Optimization](https://docs.aws.amazon.com/wellarchitected/latest/agentic-ai-lens/cost-optimization.html)
-- [Cloudscape Design System](https://cloudscape.design/)
