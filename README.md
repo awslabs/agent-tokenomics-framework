@@ -1,229 +1,241 @@
 # Agent Tokenomics Framework
 
-**Agentic token-economics best practices, demonstrated end to end on a realistic AWS workload — with cost and quality measured before and after each technique.**
+**Optimize, govern and explain the token cost of agentic AI workloads on Amazon Bedrock AgentCore.**
 
-A runnable AWS Sample built on **Strands Agents + Amazon Bedrock AgentCore**. It pairs a real multi-agent customer-support workload with a **Tokenomics control plane** that lets you toggle each optimization/governance technique on or off and prove the savings with A/B benchmarks.
+**Agent Tokenomics Framework** is a reference implementation for controlling the token cost of
+multi-agent applications on [Amazon Bedrock AgentCore](https://aws.amazon.com/bedrock/agentcore/).
+It focuses on three pillars:
 
----
+- **Optimization:** spend fewer tokens on every run, with patterns such as prompt caching,
+  context management, model routing and managed conversation memory.
+- **Governance:** keep spend within limits by enforcing per-user quotas, throttles and per-agent
+  and per-session caps inside the agent loop, before a model call is made.
+- **Observability:** see token cost in dollars by agent, user and time window, and prove each
+  change saved money with A/B benchmarks on identical conversations.
 
-## Why This Exists
-
-Agentic AI burns far more tokens than chatbot workloads — agents re-send accumulated context every turn, delegate across agents, and loop, so cost grows fast and spikes are found after the fact. The problem has three parts:
-
-- **What do I fix first?** — a prioritised set of techniques, shown working.
-- **How do I keep it within limits?** — governance that caps and controls spend.
-- **How do I know it worked?** — a way to measure the savings *and* the quality tradeoff.
-
-This reference solution answers all three by managing token cost across its whole lifecycle — **optimisation, governance, observability** — and proving each change on a real workload rather than describing it on paper.
-
-**Guiding rule — reuse, never duplicate.** We do not rebuild what AgentCore provides natively (logs, traces, native observability views, evaluations). We build only the delta the platform leaves out: dollarized cost, feature flags, usage plans, benchmark A/B, and high-usage ranking.
-
----
-
-## High-Level Architecture
-
-The solution has two planes:
-
-- **Application plane** — a **customer-support agent** (orchestrator + 2 specialists, Strands, hosted on AgentCore Runtime) standing in for a production workload. Deliberately complex: multi-turn loops, delegation, redundant tool lookups, and a large stable system prompt so every technique has something to act on.
-  - **Users:** end customers (e-commerce shoppers). They sign in to the chat UI and send free-form support questions.
-- **Tokenomics control plane** — a serverless app (React + Cloudscape on S3/CloudFront, API Gateway + Lambda, DynamoDB) where an admin **sees cost**, **sets usage plans**, **toggles each tokenomics feature on/off**, and **runs before/after benchmarks**.
-  - **Users:** admins and operators (business owners or AWS partners). They sign in to the admin UI with a separate account.
-
-Benchmarking is separate from the chat: real conversations happen in the chat UI; benchmarks are driven through the API by a load generator that simulates many bulk conversations.
+The framework demonstrates the code and configuration for each pillar on a working multi-agent
+application built with the [Strands Agents SDK](https://strandsagents.com), so you can see exactly
+how each pattern is implemented and apply it to your own agents.
 
 ---
 
-## How It Works
+## Overview
 
-Every technique is a **toggle-able overlay** on a working baseline agent. All strategy code ships in the deployed container, defaulting **off**; flipping a flag in the control plane changes behavior with **no redeploy** — hook-based features apply on the next request, and construction-based features (context management, model routing) apply on the next session.
+AI agents work through multi-step reasoning loops, repeated tool calls and a growing context.
+Each step spends tokens, the cost compounds across every session, and small inefficiencies repeat
+across thousands of sessions, often staying invisible until the bill arrives. Cutting cost once
+isn't the hard part; keeping it down is. Agents behave differently every run, and a change that
+cuts cost today can regress after the next deploy.
 
-```
-End customer ──chat──► Support agent (Strands on AgentCore) ──telemetry──► CloudWatch
-                              ▲                                                │
-        flags / usage plans   │                                                ▼
-   Admin ──► Control plane ────┘                              Control plane reads $ cost,
-   (React + Cloudscape, API GW + Lambda, DynamoDB)            cache health, high-usage users
-                              ▲
-   Load generator ──bulk conversations via API (benchmark runs)
-```
+Tokenomics answers the three questions you end up asking about agent token cost:
+
+| Question | Pillar | What it does |
+|----------|--------|--------------|
+| What do I fix first? | **Optimization** | Spend fewer tokens on the typical run. Most agent cost is the same tokens paid for over and over. |
+| How do I keep it within limits? | **Governance** | Cap the outlier run in-loop, before it blows the budget. Billing data can take hours to update. |
+| How do I prove it worked? | **Observability** | See cost in dollars, find where tokens go, and confirm a change really saved money. |
+
+The framework implements tokenomics design patterns across these pillars, using primitives that
+AgentCore and the Strands SDK already provide (prompt caching, hooks, execution limits, memory),
+and adds the capabilities they leave out: dollarized cost, feature flags, usage plans, A/B
+benchmarks and an Advisor.
+
+---
+
+## Architecture
+
+The solution separates a lean **application plane** that answers users and applies the patterns
+from a **control plane** that owns token cost operations.
+
+![Solution architecture](docs/diagrams/solution-architecture.png)
+
+It has four components, each building on the one before:
+
+1. **Sample agentic application (application plane).** A supervisor-based, multi-agent
+   customer-support app for an e-commerce store. A Claude Sonnet 5.5 orchestrator routes each
+   shopper's question to Claude Haiku 5.5 specialists: an **Order agent** (status, tracking,
+   history) and a **Knowledge agent** (policy and how-to questions). It is deliberately complex
+   (repeated loops, delegation, a large stable system prompt) so every pattern has something to
+   act on. Swap in your own workload and the same patterns apply. This plane also enforces the
+   token limits set in the control plane.
+2. **Tokenomics control plane.** A single pane of glass where an admin sees cost, sets limits and
+   proves savings without touching the agent's code (see [Features](#features)).
+3. **Tokenomics Advisor.** A read-only assistant in the admin UI you ask in plain language
+   ("what should I fix next?", "why did cost jump this week?"). It grounds every answer in your
+   metrics, flags, governance settings and a catalog of tokenomics patterns.
+4. **Tokenomics Agent Skill.** A developer tool in the [Agent Skills](skills/agent-tokenomics/)
+   format. As you build an agent, it reads your codebase and suggests where prompt caching, model
+   routing or output caps belong, so the patterns land in the code the first time.
+
+After every turn, the agent publishes a usage event (input, output and cache tokens, model IDs,
+dollar cost, any limit hit) to EventBridge. A Lambda consumer writes it to the DynamoDB Metrics
+table, the single source of truth for analytics, governance reports and the Advisor.
+
+See the [Developer Guide](docs/DEVELOPER_GUIDE.md) for the code-level design of each plane.
 
 ---
 
 ## Features
 
-The techniques included, across the three pillars:
+### Optimization patterns (application plane)
 
-| # | Feature | Pillar |
-|---|---------|--------|
-| 1 | Context management (configure-native on Strands) ✅ | Optimisation |
-| 2 | Model routing by step complexity (configure-native) | Optimisation |
-| 3 | Prompt-cache placement | Optimisation |
-| 4 | System-prompt optimisation | Optimisation |
-| 5 | High-usage user identification | Observability |
-| 6 | Checkpoints & retries (resume by `transaction_id`) | Governance |
-| 7 | Per-agent/session/step budget limits (usage plans) | Governance |
-| 8 | Conversation memory (short-term, AgentCore Memory) ✅ | Optimisation lever |
+Prompt caching, context management, model routing and memory are toggled from the control plane
+and can be benchmarked against a baseline.
 
-Supporting observability — cost attribution, prompt-cache hit-rate & savings, cost-per-outcome, real-time anomaly/runaway-loop detection — is built on AgentCore/CloudWatch telemetry (reuse-first).
+| Pattern | What it does |
+|---------|--------------|
+| **Prompt-cache placement** | Orders the prompt and places cache breakpoints so the model reuses the stable prefix instead of reprocessing it every call. |
+| **Context management** | Keeps the context window bounded by masking older tool history and using Strands' native sliding-window and summarizing conversation managers. |
+| **Model routing by step complexity** | An LLM-as-a-judge classifies each step; simple steps go to a cheaper model, hard ones to a more capable model. |
+| **System-prompt optimization** | Removes repeated instructions and ships the shorter text as a frozen, versioned prompt. |
+| **Conversation memory** | Keeps context across turns with AgentCore Memory; a baseline that lets you measure how caching and context management affect cost. |
 
-**Conversation memory** is a toggle-able lever: with the `memory` flag on, the support agent recalls earlier turns in a conversation (short-term AgentCore Memory, orchestrator-scoped). It makes the chat production-like and, for tokenomics, adds the per-turn input-token growth that prompt-cache and context management then optimise. Long-term memory is planned for a later release.
+### Control plane
 
-**Context management** is a toggle-able lever that keeps the orchestrator's conversation history lean (configure Strands' native conversation managers, don't rebuild). It only has an effect with `memory` on. It is **masking-first**: when memory restores history, earlier turns' tool calls and specialist answers are replaced with short placeholders, keeping your questions and the agent's replies. On top of that it picks a mode from the prompt-cache flag: with caching **off**, a sliding window (default 12 messages, editable on the Flags page); with caching **on**, it summarises only when the prompt gets large (default 20,000 tokens, editable as "Max tokens before summarizing") using a cheap Haiku summarizer, because trimming every turn would break the history cache. Summarizer spend is counted inside the orchestrator (it is an internal component, not an agent) and broken out separately, and benchmarks report tool blocks masked, messages trimmed, summarizations, cache read/write cost and input tokens per turn. See the developer guide §3.6.
+| Feature | What it does |
+|---------|--------------|
+| **Token analytics** | Dollarized spend, savings and usage by agent, user and time window. |
+| **Token governance** | Usage plans the agent enforces on every turn: per-user daily and monthly quotas, a per-minute throttle, per-agent ceilings and a per-session budget. When a limit trips, the run stops cleanly with a note saying which limit applied. |
+| **Feature flags** | Switch each pattern on or off on the live agent, with no code change or redeploy. The agent picks it up on its next turn. |
+| **Benchmarking** | Runs the same multi-turn conversations twice (baseline vs candidate pattern set) and compares tokens, cost per session, model calls and the cost gain. |
+| **Activity log** | Who changed which flag, usage plan or benchmark, and when (old → new). |
 
-**Tokenomics Advisor** — a read-only admin chat on the control plane (a Strands agent on its own AgentCore Runtime) that explains what drives cost and which tokenomics patterns apply, citing only figures read from your metrics and configuration. See [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) §4.8.
-
----
-
-## Benchmarking — Before / After Proof
-
-Two modes over the same flags and the same load generator:
-
-- **Live toggle + load** — flip a feature, fire bulk conversations, watch cost move in near-real-time.
-- **Benchmark runs** — a fixed, versioned scenario set (same conversations, same seed, deterministic backends) is run as a named run tagged with the exact flag config, so **baseline (all flags off)** vs **optimized** can be compared on identical inputs. Savings are always shown *with* the quality tradeoff, never alone.
+Limits are enforced inside the agent loop: a Strands `BeforeModelCallEvent` hook checks each
+user's quota before every model call on the orchestrator and both specialists, Strands limits cap
+iterations and tokens per agent call, and Bedrock `maxTokens` caps output. The agent keeps calling
+Bedrock directly, so prompt caching stays intact.
 
 ---
 
-## Technology Stack
+## Prerequisites
 
-| Layer | Choice |
-|-------|--------|
-| Chat & control-plane frontends | React + Cloudscape Design System |
-| Static hosting | Amazon S3 + CloudFront |
-| Control-plane API | API Gateway + AWS Lambda |
-| Config / state store | Amazon DynamoDB |
-| Authentication | Amazon Cognito (separate pool per plane) |
-| Agent framework | Strands Agents SDK (Python) |
-| Agent hosting | Amazon Bedrock AgentCore Runtime |
-| Conversation memory | Amazon Bedrock AgentCore Memory (short-term) |
-| Inter-agent delegation | In-process (A2A-ready seam for future) |
-| Models | Bedrock: Claude Sonnet / Claude Haiku / Amazon Nova Lite |
-| Telemetry | AgentCore Observability → CloudWatch (reused) |
-| IaC | AWS CDK |
+| Requirement | Notes |
+|-------------|-------|
+| **AWS account** | With permissions to deploy CDK stacks (CloudFormation, IAM, Lambda, DynamoDB, Cognito, AgentCore, S3, CloudFront). |
+| **AWS CLI v2** | Installed and authenticated (`aws configure` or `AWS_PROFILE`). [Install](https://aws.amazon.com/cli/) |
+| **Amazon Bedrock model access** | Claude Sonnet 5.5, Claude Haiku 5.5 and Amazon Nova Lite, enabled in the Region you deploy to. |
+| **Python 3.12+** | Runs the CDK app and the seed step. [Install](https://www.python.org/downloads/) |
+| **Node.js 20.19+ or 22.12+** | With npm. Runs the AWS CDK CLI and builds the UIs. [Install](https://nodejs.org/) |
+| **Container runtime** | Docker, Finch or Podman, running. Builds the ARM64 agent images. |
+
+Supported Regions: US East (N. Virginia) `us-east-1`, US East (Ohio) `us-east-2` and
+US West (Oregon) `us-west-2`.
 
 ---
 
-## Project Structure
+## Deployment
 
-```
-├── docs/                              # Architecture reference + optimisation patterns
-├── src/
-│   ├── app-plane/                     # Strands support agent (AgentCore Runtime)
-│   │   ├── entrypoint.py              # BedrockAgentCoreApp @app.entrypoint
-│   │   ├── Dockerfile                 # ARM64 image for AgentCore
-│   │   ├── agents/ tools/ tokenomics/ # orchestrator+specialists, tools, levers
-│   │   └── store.py                   # DynamoDB-backed business data
-│   │   └── chat_api/                  # thin proxy Lambda the chat UI calls
-│   ├── control-plane/                 # admin API (flags + benchmarks)
-│   │   ├── lambda_entry.py            # API Gateway proxy -> handlers
-│   │   ├── handlers/ lib/             # flags, benchmarks; DynamoDB store
-│   │   └── scenarios/v1.json          # fixed benchmark scenario set
-│   └── shared/                        # flags schema + token->$ price map
-├── web/                               # React + Cloudscape SPAs (admin + chat)
-├── infra/                             # CDK stacks + seed script + seed data
-└── scripts/                           # deploy-all.sh (+ deploy-app-plane.sh, deploy-control.sh)
+```bash
+git clone https://github.com/awslabs/agent-tokenomics-framework
+cd agent-tokenomics-framework
+bash scripts/deploy-all.sh
 ```
 
-For a deep, code-level walkthrough of the design and implementation (the two planes, the agentic turn, the tokenomics patterns, and token governance), read the **[Developer Guide](DEVELOPER_GUIDE.md)**.
+`deploy-all.sh` checks the prerequisites, prompts for the AWS Region and the two login passwords
+(below), bootstraps the AWS CDK if needed, sets up the environment and deploys both planes end to
+end. When it finishes it prints the Chat UI and Admin UI URLs with their logins.
 
-Start with the **[current architecture](docs/architecture/architecture.md)** — the living, as-built reference.
-
----
-
-## Development Setup
-
-### 1. Logins (demo users)
-
-Both UIs require sign-in. The deploy creates these users and asks you for two
-passwords at the start (12+ characters with an uppercase letter, a lowercase
-letter, a digit and a symbol):
+**Logins.** Both UIs require sign-in. The deploy creates these users with the passwords you enter
+(12+ characters with an uppercase letter, a lowercase letter, a digit and a symbol):
 
 | UI | Users | Password |
 |----|-------|----------|
 | Chat UI | `bob@example.com` (prime tier), `eva@example.com` (basic tier) | the Chat UI password you enter |
 | Admin UI | `admin@example.com` | the Admin UI password you enter |
 
-Forgot a password? Re-run `./scripts/deploy-all.sh` and enter new ones. User
-pools, roles and adding users: [Developer Guide §3.7 and §4.9](DEVELOPER_GUIDE.md#37-user-management).
+Forgot a password? Re-run `bash scripts/deploy-all.sh` and enter new ones.
 
-### 2. Prerequisites
-
-| Tool | Why | Install |
-|------|-----|---------|
-| **AWS CLI v2** | Deploy + query AWS; must be authenticated to the target account | [aws.amazon.com/cli](https://aws.amazon.com/cli/) |
-| **Python 3.12+** | Runs the CDK app (infra) and the seed step | [python.org](https://www.python.org/downloads/) |
-| **Node.js 20.19+ or 22.12+** | Runs the AWS CDK CLI (`npx`) and builds the SPAs (Vite 8 requires these minimums) | [nodejs.org](https://nodejs.org/) |
-| **Docker** (or Finch/Podman) | Builds the ARM64 agent container image | [docker.com](https://www.docker.com/) |
-
-Also do two things yourself before deploying:
-
-1. **Authenticate the AWS CLI** — `aws configure` (or set `AWS_PROFILE`).
-2. **Enable Amazon Bedrock model access** for Claude Sonnet 5.5, Claude Haiku
-   5.5, and Amazon Nova Lite **in the region you deploy to** — the agent fails
-   at invoke time without it. Sonnet 5.5 is reached via the Global cross-Region
-   inference profile. `deploy-all.sh` reminds you which region that is.
-
-### 3. Deploy
-
-One command, run from the repo root — sets up the environment and deploys both
-planes end to end:
+**Redeploy one plane.** The Region from the first run is saved to `infra/.deploy-region` and
+reused:
 
 ```bash
-bash scripts/deploy-all.sh          # prompts for region + the two login passwords
+bash scripts/deploy-app-plane.sh    # agent runtime, chat UI and demo data
+bash scripts/deploy-control.sh      # admin API, admin UI and governance data
 ```
-
-It checks your tools, picks + saves the region, asks for the login passwords
-(see 1), creates the CDK virtualenv, installs the SPA deps, then runs the two
-deploy stages for you. When it finishes it prints the Chat UI and Admin UI URLs
-with their logins. It verifies each prerequisite above and stops with a clear
-fix hint if one is missing or too old; it never auto-installs system tools.
-
-### 4. Redeploy one plane (optional)
-
-The region from the first run is saved to `infra/.deploy-region` and reused:
-
-```bash
-bash scripts/deploy-app-plane.sh    # Data + AgentCore Runtime (agent image) + chat UI + seed
-bash scripts/deploy-control.sh      # admin API (API Gateway + Lambda) + admin UI + seed
-```
-
-Each script builds its SPA, deploys the CDK stacks, and prints its URLs (chat
-UI, admin UI, APIs) when done.
-
-See the **[architecture](docs/architecture/architecture.md)** for stack-level details.
 
 ---
 
-## Testing
+## Usage
 
-Unit tests (fast, offline — the default run):
+The framework is built to run as a continuous loop. You can enter at any step:
+
+1. **Fix it.** Enable patterns on the **Feature flags** page (or build them in with the Agent
+   Skill), then run a **Benchmark** against a baseline to confirm the cost benefit.
+2. **See it.** Chat as bob or eva in the Chat UI, then watch cost by agent, user and window on
+   **Analytics**. Ask the **Advisor** what to improve next.
+3. **Control it.** Set usage plans on **Governance** and watch limits fire in the enforcement
+   event log as traffic grows. Then repeat.
+
+---
+
+## Cost
+
+You pay for the AWS resources the solution uses while it is deployed. Most components are
+serverless and pay-per-use (Lambda, API Gateway, DynamoDB on-demand, EventBridge, CloudFront).
+The main variable cost is **Amazon Bedrock model usage**: every chat turn, benchmark run and
+Advisor question invokes models. AgentCore Runtime, AgentCore Memory and the Bedrock Knowledge
+Base on Amazon S3 Vectors are billed by use. Check current rates on the
+[Amazon Bedrock](https://aws.amazon.com/bedrock/pricing/) and
+[AgentCore](https://aws.amazon.com/bedrock/agentcore/pricing/) pricing pages, and remove the
+resources when you are done (below).
+
+---
+
+## Cleanup
+
+Remove all the resources the framework deployed to avoid future charges:
 
 ```bash
-src/app-plane/.venv/bin/python -m pytest -q
+cd agent-tokenomics-framework
+bash scripts/destroy-all.sh
 ```
 
-This includes the context-management unit tests (`tests/context_management/`):
-flag schema, `auto` mode selection, summarizer cost attribution, session restore
-across a mid-session flag change, count-preserving masking, the chat API's error
-mapping, and the per-turn / cache-cost benchmark roll-ups — no model calls, no AWS.
+---
 
-Live token-governance suite (opt-in; runs against the **deployed** stack, reuses
-the demo users, and restores your config afterward):
+## Project structure
 
-```bash
-bash tests/governance/test-governance.sh              # everything
-bash tests/governance/test-governance.sh analytics    # read-only label/graph checks (free)
-bash tests/governance/test-governance.sh enforcement  # the 8 settings fire (small Bedrock cost)
+```
+├── src/
+│   ├── app-plane/        # Strands support agent on AgentCore Runtime + chat API
+│   ├── control-plane/    # admin API, metering consumer, benchmarks, Advisor
+│   └── shared/           # flag schema, price map
+├── web/                  # React + Cloudscape UIs (admin + chat)
+├── infra/                # AWS CDK stacks
+├── seed/                 # demo data
+├── skills/               # Tokenomics Agent Skill
+├── scripts/              # deploy scripts
+├── tests/                # unit + live test suites
+└── docs/                 # architecture + optimization pattern references
 ```
 
-Live benchmarking suite (opt-in; runs against the **deployed** stack). Starts a
-real multi-turn A/B benchmark — 2 sessions × 3 turns, Run A = memory only, Run B
-= memory + prompt caching — the agent answers all 12 turns, and the test prints
-the A-vs-B comparison (cost, cache, gain) and asserts caching made Run B cheaper
-with benchmark spend tagged `source=benchmark` (never pollutes live analytics):
+---
 
-```bash
-bash tests/benchmarking/test-benchmarking.sh   # sends 12 short real agent turns (small Bedrock cost)
-```
+## Documentation
 
-See [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) §5 for what each layer covers and the
-prerequisites.
+- [Developer Guide](docs/DEVELOPER_GUIDE.md): code-level design of both planes, the patterns,
+  governance, users, extending the framework and testing (§8).
+- [Agent Skill](skills/agent-tokenomics/): the developer tool and its pattern references.
+
+---
+
+## Contributing
+
+Contributions and feedback are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Areas where
+contributions are especially valuable:
+
+- Additional tokenomics techniques and control plane features.
+- Support for agent SDKs beyond Strands.
+- Bedrock model-specific optimization patterns.
+- Agent Skill support for more AI coding tools.
+
+---
+
+## Security
+
+See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
+
+---
+
+## License
+
+This project is licensed under the Apache-2.0 License. See the [LICENSE](LICENSE) file.

@@ -505,7 +505,7 @@ def test_pattern_index_retries_after_failure(pkg):
 
 def test_developer_guide_tunables_match_settings_defaults():
     """The guide's Advisor tunables table repeats settings.py's defaults; fail when the two drift."""
-    guide = (_CP.parents[1] / "DEVELOPER_GUIDE.md").read_text()
+    guide = (_CP.parents[1] / "docs" / "DEVELOPER_GUIDE.md").read_text()
     settings_src = (_CP / "advisor" / "agent" / "settings.py").read_text()
     documented = dict(re.findall(r"^\| `(ADVISOR_[A-Z_]+)` \| ([\d.]+) \|", guide, re.M))
     env_defaults = re.findall(r'os\.environ\.get\("(ADVISOR_[A-Z_]+)", "([^"]*)"\)', settings_src)
