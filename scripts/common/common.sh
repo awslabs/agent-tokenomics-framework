@@ -12,7 +12,7 @@
 #   VALUE="$(cfn_output "$REGION" Tokenomics-AppPlane AgentRuntimeArn)"
 
 # Pinned CDK CLI version (one source of truth for both deploy scripts).
-CDK="npx --yes aws-cdk@2.1140.0"
+CDK="npx --yes aws-cdk@2.1149.0"
 
 # Default region when nothing else is set. Matches infra/app.py + src/*/config.py
 # so an unset region lands every stack + the runtime in one region.
