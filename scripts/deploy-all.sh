@@ -16,8 +16,9 @@
 # Environment setup phase (below) does NOT deploy; it only prepares the host:
 #   1. Preflight: verify the required tools exist and meet minimum versions.
 #      (It checks and instructs -- it never auto-installs system tools.)
-#   2. Region: prompt for the AWS region to deploy into (default us-east-1) and
-#      persist it to infra/.deploy-region so the deploy scripts reuse it.
+#   2. Region: pick one of the supported Regions (us-east-1, us-east-2,
+#      us-west-2) from a numbered menu (default us-east-1) and persist it to
+#      infra/.deploy-region so the deploy scripts reuse it.
 #   3. CDK bootstrap health: detect a CDKToolkit stack left in a failed state
 #      and offer the non-destructive recovery (never auto-deletes shared infra).
 #   4. Python: create the CDK virtualenv at infra/.venv and install
@@ -105,24 +106,42 @@ ACCOUNT="$(aws sts get-caller-identity --query Account --output text 2>/dev/null
 info "AWS account $ACCOUNT OK"
 
 # --- 2. Region --------------------------------------------------------------
-# Honor a pre-set AWS_REGION; otherwise prompt with us-east-1 as the default.
-# us-east-1 matches the CDK app default (infra/app.py) and the agent runtime
-# default (src/*/config.py), so an unset region lands everything in one region.
+# Only the supported Regions (SUPPORTED_REGIONS in scripts/common/common.sh).
+# Honor a pre-set AWS_REGION (must be supported); otherwise show a numbered menu.
+# us-east-1 is the default: it matches the CDK app default (infra/app.py) and
+# the agent runtime default (src/*/config.py).
 if [ -n "${AWS_REGION:-}" ]; then
   REGION="$AWS_REGION"
+  region_supported "$REGION" \
+    || fail "'$REGION' is not supported. Supported: ${SUPPORTED_REGIONS// /, }."
   info "using AWS_REGION from environment: $REGION"
+elif [ ! -t 0 ]; then
+  REGION="$DEFAULT_REGION"
+  info "no terminal to prompt; using the default region $REGION (set AWS_REGION to choose)."
 else
-  DEFAULT_REGION="us-east-1"
-  printf "[setup] AWS region to deploy into [%s]: " "$DEFAULT_REGION"
-  read -r REGION || true
-  # Strip all whitespace and stray backslashes that some terminals inject.
-  REGION="$(printf '%s' "$REGION" | tr -d '[:space:]\\')"
-  REGION="${REGION:-$DEFAULT_REGION}"
-fi
-# Validate it looks like an AWS region (e.g. us-east-1) so a typo/garbage value
-# never propagates into CDK bucket names and fails deep in the deploy.
-if ! printf '%s' "$REGION" | grep -Eq '^[a-z]{2}-[a-z]+-[0-9]+$'; then
-  fail "'$REGION' is not a valid AWS region (expected like 'us-east-1'). Re-run: bash scripts/deploy-all.sh"
+  info "Select the AWS Region to deploy into:"
+  i=0
+  for r in $SUPPORTED_REGIONS; do
+    i=$((i + 1))
+    if [ "$r" = "$DEFAULT_REGION" ]; then tag="   [default]"; else tag=""; fi
+    printf "  %d) %-11s %s%s\n" "$i" "$r" "$(region_label "$r")" "$tag"
+  done
+  REGION=""
+  tries=0
+  while [ -z "$REGION" ]; do
+    tries=$((tries + 1))
+    [ "$tries" -le 3 ] || fail "no valid region selected. Re-run: bash scripts/deploy-all.sh"
+    printf "[setup] Enter 1-%d (press Enter for 1): " "$i"
+    read -r CHOICE || true
+    # Strip all whitespace and stray backslashes that some terminals inject.
+    CHOICE="$(printf '%s' "$CHOICE" | tr -d '[:space:]\\')"
+    CHOICE="${CHOICE:-1}"
+    case "$CHOICE" in
+      *[!0-9]*) ;;
+      *) [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le "$i" ] && REGION="$(echo $SUPPORTED_REGIONS | cut -d' ' -f"$CHOICE")" ;;
+    esac
+    [ -n "$REGION" ] || info "Please enter a number from 1 to $i."
+  done
 fi
 # Persist so the deploy scripts (steps 2 and 3) reuse it without re-asking.
 printf '%s\n' "$REGION" > "$REGION_FILE"
