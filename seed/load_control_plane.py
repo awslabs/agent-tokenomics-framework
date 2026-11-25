@@ -1,22 +1,16 @@
 #!/usr/bin/env python3
-"""Seed control-plane demo data after deploy: admin user + token-governance tables.
+"""Seed control-plane demo data after deploy: token-governance tables.
 
-Idempotent. Run at the end of scripts/deploy-control.sh with the admin pool
-id and (optionally) the governance table names from the stack outputs.
+Data only: the admin Cognito user is created beforehand by
+scripts/deploy-control.sh (with the password scripts/deploy-all.sh asks for).
+Idempotent. Run at the end of scripts/deploy-control.sh with (optionally) the
+governance table names from the stack outputs.
 
-  1. Admin Cognito user (self sign-up is disabled -> provisioned via admin APIs).
-     A NEW admin is created only when TOKENOMICS_ADMIN_PASSWORD is set (it
-     becomes the permanent password); otherwise it is skipped with a warning.
-     An existing admin's password is only reset when TOKENOMICS_ADMIN_PASSWORD
-     is set (see seed/credentials.py). The admin is put in the
-     `governance-admin` group (may change config; threat model M14).
-     `--viewer-email` optionally provisions a read-only `viewer` user the same
-     way, using TOKENOMICS_VIEWER_PASSWORD.
-  2. Usage plans (per-agent caps + a global per-user quota default) into the
+  1. Usage plans (per-agent caps + a global per-user quota default) into the
      shared UsagePlans table, so the Governance page is populated on first load.
      Optionally seeds a per-user OVERRIDE (the live demo lever) by resolving a
      demo customer's Cognito `sub` from the app-plane pool.
-  3. A few sample enforcement events into the metrics table so the event log +
+  2. A few sample enforcement events into the metrics table so the event log +
      plan-vs-actual aren't empty in a demo.
 
 All governance tables/args are optional: pass only what you have and the rest is
@@ -24,8 +18,7 @@ skipped (so this stays compatible with a control-plane-only deploy).
 
 Usage:
     python seed/load_control_plane.py \
-        --region us-west-2 --user-pool-id <adminPoolId> \
-        [--email admin@example.com] [--viewer-email viewer@example.com] \
+        --region us-west-2 \
         [--usage-plans-table Tokenomics-UsagePlans] \
         [--metrics-table <MetricsTableName>] \
         [--app-user-pool-id <appPoolId> --override-email eva@example.com --override-daily-tokens 500]
@@ -41,7 +34,6 @@ from decimal import Decimal
 from pathlib import Path
 
 import boto3
-import credentials  # sibling module (seed/ is on sys.path when run as a script)
 
 _DATA_DIR = Path(__file__).resolve().parent / "data"
 
@@ -59,48 +51,6 @@ def _to_dynamo(obj):
     if isinstance(obj, (list, tuple)):
         return [_to_dynamo(v) for v in obj]
     return obj
-
-
-# ---- admin user ------------------------------------------------------------
-
-
-_PASSWORD_ENV = "TOKENOMICS_ADMIN_PASSWORD"  # nosec B105 -- env var name, not a password
-_VIEWER_PASSWORD_ENV = "TOKENOMICS_VIEWER_PASSWORD"  # nosec B105 -- env var name, not a password
-# Cognito groups created by ControlPlaneStack (src/control-plane/lib/authz.py).
-ADMIN_GROUP = "governance-admin"
-VIEWER_GROUP = "viewer"
-
-
-def _seed_admin(
-    cog,
-    pool_id: str,
-    email: str,
-    password: str | None,
-    *,
-    group: str = ADMIN_GROUP,
-    password_env: str = _PASSWORD_ENV,
-) -> None:
-    """Create/confirm a control-plane user in `group`; set its password only when supplied.
-
-    A new user with no supplied password is skipped (never created password-less).
-    """
-    if password is None and not credentials.user_exists(cog, pool_id, email):
-        credentials.report_missing(email, password_env)
-        return
-    attrs = [
-        {"Name": "email", "Value": email},
-        {"Name": "email_verified", "Value": "true"},
-    ]
-    try:
-        cog.admin_create_user(
-            UserPoolId=pool_id, Username=email, UserAttributes=attrs, MessageAction="SUPPRESS"
-        )
-    except cog.exceptions.UsernameExistsException:
-        cog.admin_update_user_attributes(UserPoolId=pool_id, Username=email, UserAttributes=attrs)
-    if password:
-        cog.admin_set_user_password(UserPoolId=pool_id, Username=email, Password=password, Permanent=True)
-    cog.admin_add_user_to_group(UserPoolId=pool_id, Username=email, GroupName=group)
-    print(f"  {group} user ready: {email}")
 
 
 # ---- governance seed -------------------------------------------------------
@@ -214,9 +164,6 @@ def _seed_demo_metrics(ddb, table_name: str) -> None:
 def main() -> None:
     p = argparse.ArgumentParser(description="Seed control-plane demo data.")
     p.add_argument("--region", default="us-west-2")
-    p.add_argument("--user-pool-id", required=True)
-    p.add_argument("--email", default="admin@example.com")
-    p.add_argument("--viewer-email", default="", help="also provision a read-only viewer user")
     # governance (all optional)
     p.add_argument("--usage-plans-table", default="")
     p.add_argument("--metrics-table", default="")
@@ -234,21 +181,9 @@ def main() -> None:
     p.add_argument("--override-daily-tokens", type=int, default=0)
     args = p.parse_args()
 
-    cog = boto3.client("cognito-idp", region_name=args.region)
     ddb = boto3.resource("dynamodb", region_name=args.region)
 
     print(f"Seeding control-plane data in {args.region}:")
-    _seed_admin(cog, args.user_pool_id, args.email, credentials.from_env(_PASSWORD_ENV))
-    if args.viewer_email:
-        _seed_admin(
-            cog,
-            args.user_pool_id,
-            args.viewer_email,
-            credentials.from_env(_VIEWER_PASSWORD_ENV),
-            group=VIEWER_GROUP,
-            password_env=_VIEWER_PASSWORD_ENV,
-        )
-
     if args.usage_plans_table:
         _seed_usage_plans(ddb, args.usage_plans_table)
 

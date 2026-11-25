@@ -99,7 +99,7 @@ order ids, dates, dollar amounts, or raw length: a specialist classifies the orc
 composed task string, which routinely carries those even for trivial lookups, so those signals
 would over-escalate routine work to Sonnet and erode the lever's savings. A genuine
 cross-referencing task ("*compare* ORD-1001 and ORD-1002") carries a reasoning keyword and is
-caught. When unsure, it fails cheap (stays on Haiku) — the accepted V1 specialist tradeoff.
+caught. When unsure, it fails cheap (stays on Haiku) — the accepted specialist tradeoff.
 
 **LLM-as-judge (orchestrator).** One Nova Lite call classifies the latest step SIMPLE or COMPLEX.
 SIMPLE → route down to Haiku; anything else, or a parse/model error → decline → stay on Sonnet
@@ -160,7 +160,7 @@ window (Sonnet 5.5 is 1M, Haiku 5.5 ~200k). Nova Lite is the judge only — neve
 
 ## 8. Quality tradeoff
 
-Low–medium, not formally scored in V1. The orchestrator fails *safe* to Sonnet, so a judge miss
+Low–medium, not formally scored. The orchestrator fails *safe* to Sonnet, so a judge miss
 never silently degrades a supervisory step. A specialist heuristic false-negative keeps a hard step
 on Haiku (a weaker answer); the conservative "escalate only on a clear reasoning signal" rule bounds
 this. Savings are always reported with the route distribution so the tradeoff is visible, never cost

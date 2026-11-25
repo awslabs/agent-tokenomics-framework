@@ -9,6 +9,7 @@
    - [3.4 Strands hooks: the flag and governance seam](#34-strands-hooks-the-flag-and-governance-seam)
    - [3.5 Features: AgentCore, Memory, Strands Agents](#35-features-agentcore-memory-strands-agents)
    - [3.6 Tokenomics design patterns](#36-tokenomics-design-patterns)
+   - [3.7 User management](#37-user-management)
 4. [Tokenomics control plane](#4-tokenomics-control-plane)
    - [4.1 Metering pipeline](#41-metering-pipeline)
    - [4.2 Analytics](#42-analytics)
@@ -18,6 +19,7 @@
    - [4.6 Front-end (admin SPA)](#46-front-end-admin-spa)
    - [4.7 Control-plane API model](#47-control-plane-api-model)
    - [4.8 Advisor](#48-advisor)
+   - [4.9 User management](#49-user-management)
 5. [Cross-plane integration](#5-cross-plane-integration)
    - [5.1 The shared config contract (sync)](#51-the-shared-config-contract-sync)
    - [5.2 The EventBridge contract (async)](#52-the-eventbridge-contract-async)
@@ -670,7 +672,7 @@ vars, so the container runs unmodified.
 
 #### AgentCore Memory (short-term, flag-gated)
 
-Memory is **short-term only** in v1 (raw conversation events; no long-term strategies). It is
+Memory is **short-term only** (raw conversation events; no long-term strategies). It is
 provisioned as a `CfnMemory` resource and gated behind the `memory` flag:
 
 `infra/stacks/app_plane_stack.py`
@@ -779,7 +781,7 @@ Design note (verified against Strands 1.54.0):
   Strands applies Bedrock prompt caching natively via BedrockModel's
   `cache_config` (modern, non-deprecated) -- it places the cachePoint blocks
   after the stable prefix (tools -> system) for us. So "prompt-cache placement"
-  in V1 is implemented by BUILDING the model with `CacheConfig(strategy="auto")`
+  is implemented by BUILDING the model with `CacheConfig(strategy="auto")`
   when the flag is ON, and WITHOUT it when OFF.
   ...
   Baseline (flag OFF): no cache_config -> byte-identical requests, just uncached
@@ -943,7 +945,7 @@ index) that the Benchmarks page charts for Run A vs Run B. Masking shrinks token
 count, so the window still fills at ~4 messages per tool-using turn: trimming starts around
 turn 4 with the default window of 12, so benchmark with 5 turns.
 
-> **Not built in V1:** an LLM-judge quality score, and `pin_first` (unsafe with memory restore).
+> **Not built:** an LLM-judge quality score, and `pin_first` (unsafe with memory restore).
 
 #### Model routing (per-step model tiering)
 
@@ -1088,8 +1090,51 @@ def current() -> FlagConfig:
 ```
 
 > **Four flags ship.** `ALL_FEATURES = (prompt_cache, memory, context_management, model_routing)`.
-> Older design docs list a larger toggle model (checkpoints, etc.); those are not flags in v1.
+> Older design docs list a larger toggle model (checkpoints, etc.); those are not flags.
 > Governance caps are a *separate* config contract (UsagePlans), not feature flags.
+
+### 3.7 User management
+
+Customers sign in to the chat SPA through the Cognito user pool `Tokenomics-app-plane`
+(`infra/stacks/app_plane_stack.py`). The Chat API sits behind a Cognito authorizer, so an
+unauthenticated request gets `401`.
+
+| Setting | Value |
+|---------|-------|
+| Pool | `Tokenomics-app-plane`, one per audience (operators use a separate pool, §4.9) |
+| Sign-in | email |
+| Self sign-up | off; users are provisioned by the deploy script |
+| Profile | `email`, `name`, `custom:tier` (`prime` / `basic`); no separate customers table |
+| Identity | the Cognito `sub` is the canonical `user_id`; it keys the user's Orders and conversation session |
+| Agent context | name, email and tier reach the agent via JWT claims |
+
+**Demo users.** `scripts/deploy-app-plane.sh` creates every user in
+[`seed/data/users.json`](seed/data/users.json) with `ensure_cognito_user`
+(`scripts/common/common.sh`), before the seed runs. They share the Chat UI password that
+`scripts/deploy-all.sh` prompts for. `seed/load_app_plane.py` then only loads data: it looks up
+each user's `sub` and writes their orders.
+
+| Email | Tier | Orders |
+|-------|------|--------|
+| `bob@example.com` | prime | 2 |
+| `eva@example.com` | basic | 2 |
+
+To add a demo customer, add an entry to `seed/data/users.json` (email, name, tier, orders) and
+re-run the deploy.
+
+**Passwords.** Nothing is committed, generated or printed. The prompt is hidden, typed twice and
+checked against the pool policy before the deploy starts: 12+ characters with at least one
+uppercase letter, one lowercase letter, one digit and one symbol
+(`infra/stacks/auth_policy.py`, `password_ok` in `scripts/common/common.sh`). The password is
+kept in memory for that run and reaches boto3 on stdin, never in argv or on disk. Re-running the
+deploy with a new password resets it on existing users. For non-interactive runs (CI), preset
+`TOKENOMICS_USER_PASSWORD`; the live test suites read the same variable (§8.2).
+
+**Threat protection (optional).** Set `"cognitoThreatProtection": true` under `context` in
+`infra/cdk.json` (or `-c cognitoThreatProtection=true` on a direct `cdk deploy`) to enable
+compromised-credential detection and adaptive authentication on both pools. It uses the Cognito
+PLUS feature plan, billed per monthly active user, so it is off by default. Recommended for any
+non-throwaway deployment.
 
 ---
 
@@ -1611,8 +1656,8 @@ The seeded demo values:
 `session_max_tokens` is co-located on the `user#default` row by the schema's `to_items()`
 convention, so there is exactly one global row.
 
-> **Per-user overrides are DORMANT in v1.** `GovernanceConfig.user_overrides` exists and
-> `put_user_override` is routed, but the v1 UI never writes it and the seed never seeds it —
+> **Per-user overrides are DORMANT.** `GovernanceConfig.user_overrides` exists and
+> `put_user_override` is routed, but the UI never writes it and the seed never seeds it —
 > there is **one global default quota for everyone**. `quota_for(user_id)` returns the default
 > for all users. The schema keeps overrides for the future tier feature.
 
@@ -1905,7 +1950,7 @@ CloudWatch (`infra/stacks/api_access_logs.py`).
 | PUT | `/flags` | `flags_handler.put_flags` | write feature levers |
 | GET | `/governance/config` | `governance_handler.get_config` | read the 8 governance settings |
 | PUT | `/governance/config` | `governance_handler.put_config` | write the 8 governance settings |
-| PUT | `/governance/user-override` | `governance_handler.put_user_override` | per-user caps (DORMANT in v1) |
+| PUT | `/governance/user-override` | `governance_handler.put_user_override` | per-user caps (DORMANT) |
 | GET | `/governance/analytics?user=&window=` | `governance_handler.analytics` | plan-vs-actual, top spenders |
 | GET | `/governance/events?user=&window=&config=` | `governance_handler.events` | enforcement event log |
 | GET | `/governance/audit?limit=` | `audit.list_entries` | change history, newest first |
@@ -1954,7 +1999,7 @@ if method == "POST":
 > lists only `/health`, `/flags`, `/benchmarks` and `/advisor/chats` — it omits every
 > `/governance/*` route and the user-override route. The real surface is the
 > `handler` body above. Note also that `PUT /governance/user-override` is routed
-> but **DORMANT** in v1: the admin UI never calls it (per §4.5's "overrides
+> but **DORMANT**: the admin UI never calls it (per §4.5's "overrides
 > dormant" note).
 
 `POST /benchmarks` returns **202** immediately and runs the replay on a daemon
@@ -1967,7 +2012,7 @@ quoted in §4.4). The module docstring is candid about the limitation:
 # returns the run_id immediately (202). In Lambda a background thread is not
 # guaranteed to finish after the response is returned, so for large scenario sets
 # the production-correct evolution is a dedicated worker (Step Functions / a
-# worker Lambda / SQS). For the V1 scenario set this handler runs the replay
+# worker Lambda / SQS). For the current scenario set this handler runs the replay
 # inline on the thread within the Lambda timeout; see benchmarks._execute_run.
 ```
 
@@ -2024,6 +2069,35 @@ The live suite reads credentials only from environment variables (`TOKENOMICS_AD
 `TOKENOMICS_ADMIN_PASSWORD`; `TOKENOMICS_USER_EMAIL`, `TOKENOMICS_USER_PASSWORD` for the
 metering check; `TOKENOMICS_REGION`). The demo seed replays synthetic `UsageRecorded` events
 through the real metering consumer (§4.1).
+
+### 4.9 User management
+
+Operators sign in to the admin SPA through the Cognito user pool `Tokenomics-control-plane`,
+separate from the customer pool (§3.7). The admin API sits behind a Cognito authorizer, so an
+unauthenticated request gets `401`. Self sign-up is off and the pool uses the same password
+policy and optional threat protection as the app plane (`infra/stacks/auth_policy.py`).
+
+**Roles.** Access is role-based on Cognito groups in the admin pool
+(`src/control-plane/lib/authz.py`):
+
+| Group | Access |
+|-------|--------|
+| `governance-admin` | read and change everything: flags, usage plans, overrides, benchmarks |
+| `viewer` | read-only |
+| neither | `403` |
+
+A group change takes effect at the user's next sign-in. Every change is recorded in an
+append-only audit trail (who, when, before/after), shown as **Change history** on the Governance
+page.
+
+**Demo admin.** `scripts/deploy-control.sh` creates `admin@example.com` in `governance-admin`
+with `ensure_cognito_user` (`scripts/common/common.sh`), using the Admin UI password that
+`scripts/deploy-all.sh` prompts for. `seed/load_control_plane.py` then only seeds governance
+data. Password handling is the same as §3.7; for non-interactive runs, preset
+`TOKENOMICS_ADMIN_PASSWORD`.
+
+**Add a read-only user.** Create the user in the admin pool in Cognito and add it to the
+`viewer` group.
 
 ---
 
@@ -2262,7 +2336,7 @@ deliverable — a file plus the symbol to open.
 | Symptom | Likely cause | Where to look |
 | --- | --- | --- |
 | Governance caps reset to demo values after a redeploy | `deploy-control.sh` reseeds usage plans every run; `_seed_usage_plans` uses `batch_writer().put_item`, which overwrites the edited rows | `scripts/deploy-control.sh`, `seed/load_control_plane.py` `main`/`_seed_usage_plans`, `seed/data/usage_plans.json` |
-| Can't sign in after a first deploy; seed printed `WARNING: <email> not created` | the seed creates a user only when its password variable is set (`TOKENOMICS_USER_PASSWORD`, `TOKENOMICS_ADMIN_PASSWORD`, `TOKENOMICS_VIEWER_PASSWORD` with `--viewer-email`); nothing is generated or printed | `seed/credentials.py`, `seed/load_app_plane.py`, `seed/load_control_plane.py`, README *Demo Users* |
+| Can't sign in, or a stage script fails with `<email> does not exist and no password was given` | demo users are created by the deploy scripts with the passwords `deploy-all.sh` prompts for; a stage script run on its own can't create a missing user. Re-run `./scripts/deploy-all.sh` and enter the passwords | `scripts/deploy-all.sh` (`ask_password`), `scripts/common/common.sh` (`ensure_cognito_user`), README *Demo Users* |
 | Analytics dashboards empty on a fresh install | metrics are seeded only behind `--demo-metrics`, which the deploy script does not pass; the table fills from live chat traffic | `seed/load_control_plane.py`, §4.2 |
 | Analytics empty but `SESSION#` rows exist | the consumer failed on a bare DynamoDB reserved word in an `UpdateExpression` and silently skipped the row; look for the skip log | `_apply_dimension_attrs` in `src/control-plane/lib/store.py`; `[metering-consumer] skip event` logs |
 | A user is never blocked by their quota | cap value is `0` (= no cap), UsagePlans not seeded, or the trigger condition isn't met (caps are per-agent-per-turn); note the hook is fail-CLOSED and still blocks on a store error | `src/shared/usage_plans_schema.py` (`0` = no cap), `src/app-plane/tokenomics/hooks/quota.py`, §4.5 |

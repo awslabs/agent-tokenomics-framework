@@ -23,23 +23,31 @@
 #   4. Python: create the CDK virtualenv at infra/.venv and install
 #      infra/requirements.txt into it (idempotent).
 #   5. SPAs: npm install for web/control-plane and web/app-plane.
-# Then it runs the two deploy scripts in order.
+#   Also (right after the region): prompt for the demo login passwords -- one
+#   for the Admin UI user, one shared by the Chat UI users -- checked against
+#   the Cognito policy. They are kept in memory for this run only; the deploy
+#   scripts create the Cognito users with them before seeding.
+# Then it runs the two deploy scripts in order and prints the UI URLs + logins.
 #
 # Usage:
-#   bash scripts/deploy-all.sh                         # prompts for region
+#   bash scripts/deploy-all.sh                         # prompts for region + passwords
 #   AWS_REGION=us-east-1 bash scripts/deploy-all.sh    # skip the region prompt
 #
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/scripts/common/common.sh"   # password_ok, PASSWORD_POLICY_TEXT, cfn_output
 PYBIN="$ROOT/infra/.venv/bin/python"
 REGION_FILE="$ROOT/infra/.deploy-region"
+USERS_JSON="$ROOT/seed/data/users.json"
+ADMIN_EMAIL="admin@example.com"
 
 for arg in "$@"; do
   case "$arg" in
     -h|--help)
       echo "Usage: bash scripts/deploy-all.sh"
       echo "  Full deploy: environment setup, then the app-plane + control-plane deploys."
+      echo "  Prompts for the region and the demo login passwords (Admin UI + Chat UI)."
       echo "  Set AWS_REGION to skip the region prompt."
       exit 0
       ;;
@@ -121,6 +129,55 @@ printf '%s\n' "$REGION" > "$REGION_FILE"
 info "region: $REGION (saved to infra/.deploy-region)"
 info "REMINDER: enable Bedrock model access (Claude Sonnet 5.5, Claude Haiku 5.5, Amazon Nova Lite) in $REGION."
 info "          The Bedrock console step cannot be automated; the agent fails at invoke time without it."
+
+# --- 2b. Demo login passwords ----------------------------------------------
+# Self sign-up is off, so the deploy creates the UI users. Ask for their
+# passwords up front (hidden, confirmed, checked against the Cognito policy) so
+# the deploy never fails on a bad password at the end. Kept in memory only and
+# exported for the deploy scripts; never written to disk or printed.
+CHAT_EMAILS="$(python3 -c '
+import json, sys
+e = [u["email"] for u in json.load(open(sys.argv[1]))]
+print(" and ".join([", ".join(e[:-1]), e[-1]]) if len(e) > 1 else e[0])' "$USERS_JSON")"
+
+# ask_password <var> <prompt> <confirm-prompt> <label>
+ask_password () {
+  local var="$1" prompt="$2" confirm="$3" label="$4" pw pw2 tries=0
+  if [ -n "${!var:-}" ]; then
+    password_ok "${!var}" || fail "the preset $label password does not meet the policy: $PASSWORD_POLICY_TEXT."
+    info "$label password: using preset value"
+    export "${var?}"
+    return 0
+  fi
+  [ -t 0 ] || fail "no terminal to read the $label password from. Run ./scripts/deploy-all.sh in an interactive terminal."
+  while :; do
+    tries=$((tries + 1))
+    [ "$tries" -le 3 ] || fail "too many attempts for the $label password. Re-run: ./scripts/deploy-all.sh"
+    IFS= read -r -s -p "[setup] $prompt: " pw; echo
+    if ! password_ok "$pw"; then
+      info "password must be $PASSWORD_POLICY_TEXT. Try again."
+      continue
+    fi
+    IFS= read -r -s -p "[setup] $confirm: " pw2; echo
+    if [ "$pw" != "$pw2" ]; then
+      info "passwords do not match. Try again."
+      continue
+    fi
+    break
+  done
+  printf -v "$var" '%s' "$pw"
+  export "${var?}"
+  info "$label password OK"
+}
+
+echo
+info "Demo login passwords (needed to sign in to the UIs; not stored anywhere)."
+info "  Rules: $PASSWORD_POLICY_TEXT (e.g. ! @ # \$ % ^ & *)."
+echo
+ask_password TOKENOMICS_ADMIN_PASSWORD "Admin UI password for $ADMIN_EMAIL" "Confirm admin password" "admin"
+echo
+ask_password TOKENOMICS_USER_PASSWORD "Chat UI password for $CHAT_EMAILS" "Confirm chat password" "chat"
+echo
 
 # --- 3. CDK bootstrap health check ------------------------------------------
 # CDK bootstraps a shared "CDKToolkit" CloudFormation stack per account/region.
@@ -214,6 +271,23 @@ echo
 info "=== Deploying the control plane ==="
 bash "$ROOT/scripts/deploy-control.sh"
 
+CHAT_UI="$(cfn_output "$REGION" Tokenomics-AppPlane ChatUiUrl)"
+ADMIN_UI="$(cfn_output "$REGION" Tokenomics-ControlPlane WebUrl)"
+LINE="=================================================================="
 echo
-info "All done. Full solution deployed in $REGION."
-info "  Chat UI + admin UI URLs are printed in the two stages above."
+echo "$LINE"
+echo " Deploy complete ($REGION)"
+echo
+echo " Chat UI   $CHAT_UI"
+python3 -c '
+import json, sys
+for u in json.load(open(sys.argv[1])):
+    print("           %-17s (%s tier)" % (u["email"], u.get("tier", "basic")))' "$USERS_JSON"
+echo "           password: the chat password you entered"
+echo
+echo " Admin UI  $ADMIN_UI"
+echo "           $ADMIN_EMAIL"
+echo "           password: the admin password you entered"
+echo
+echo " Forgot a password? Re-run ./scripts/deploy-all.sh to set new ones."
+echo "$LINE"

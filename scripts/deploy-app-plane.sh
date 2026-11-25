@@ -9,8 +9,10 @@
 #      ARM64 agent image from src/app-plane/Dockerfile via the
 #      aws_bedrockagentcore.Runtime L2 -- no AgentCore CLI involved.
 #   3. Build + publish the chat SPA with Cognito + Chat API config baked in.
-#   4. Load demo data (seed/load_app_plane.py): create Cognito users, write their
-#      orders keyed by sub, seed the FAQ, reset flags.
+#   4. Create the Chat UI Cognito users (seed/data/users.json) with the chat
+#      password scripts/deploy-all.sh asked for.
+#   5. Load demo data (seed/load_app_plane.py): write the users' orders keyed by
+#      sub, seed the FAQ, reset flags.
 #
 # Prereqs: authenticated AWS CLI, Node.js (npx), a running container engine
 # (Docker/Finch) for the ARM64 image build, and Bedrock model access enabled.
@@ -66,9 +68,29 @@ echo "[deploy-app-plane] publishing chat UI..."
 ( cd "$ROOT/infra" && $CDK deploy Tokenomics-Data Tokenomics-AppPlane \
     --app "$CDK_APP" --require-approval never )
 
-# 4. Load demo data: create the Cognito users, write their orders (keyed by sub),
-#    seed the FAQ, reset flags. Uses the infra venv's boto3.
-echo "[deploy-app-plane] loading demo data (Cognito users + orders + faq + flags)..."
+# 4. Create the Chat UI users (Cognito; self sign-up is off). Emails, names and
+#    tiers come from seed/data/users.json; they share the chat password that
+#    scripts/deploy-all.sh asked for. With no password, existing users keep theirs.
+USERS_JSON="$ROOT/seed/data/users.json"
+CHAT_PW="${TOKENOMICS_USER_PASSWORD:-}"
+echo "[deploy-app-plane] creating chat users: $(python3 -c '
+import json, sys
+print(", ".join("%s (%s)" % (u["email"], u.get("tier", "basic")) for u in json.load(open(sys.argv[1]))))' "$USERS_JSON")"
+while IFS=$'\t' read -r -u 3 EMAIL NAME TIER; do
+  STATE="$(ensure_cognito_user "$REGION" "$USER_POOL_ID" "$EMAIL" "$CHAT_PW" "" \
+    "name=$NAME" "custom:tier=$TIER")"
+  if [ "$STATE" = "exists" ]; then
+    [ -n "$CHAT_PW" ] && STATE="exists, password updated" || STATE="exists, password kept"
+  fi
+  echo "  $EMAIL: $STATE"
+done 3< <(python3 -c '
+import json, sys
+for u in json.load(open(sys.argv[1])):
+    print("\t".join([u["email"], u.get("name", u["email"]), u.get("tier", "basic")]))' "$USERS_JSON")
+
+# 5. Load demo data: write each user's orders (keyed by sub), seed the FAQ,
+#    reset flags. Uses the infra venv's boto3.
+echo "[deploy-app-plane] loading demo data (orders + faq + flags)..."
 "$SEED_PY" "$ROOT/seed/load_app_plane.py" \
   --region "$REGION" \
   --user-pool-id "$USER_POOL_ID" \
@@ -83,5 +105,5 @@ echo "[deploy-app-plane] Done."
 echo "  Agent runtime ARN: $RUNTIME_ARN"
 echo "  Chat API:          $CHAT_API"
 echo "  Chat UI:           $CHAT_UI"
-echo "  Demo logins:       bob@example.com / eva@example.com  (see seed/data/users.json)"
+echo "  Chat logins:       $(python3 -c 'import json, sys; print(" / ".join(u["email"] for u in json.load(open(sys.argv[1]))))' "$USERS_JSON")"
 echo "  Next: scripts/deploy-control.sh"

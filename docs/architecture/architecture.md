@@ -120,7 +120,7 @@ body): `sub` (→ `user_id`, keys Orders + the per-conversation session), `email
 Memory is a **flag-gated tokenomics lever** (`memory` on/off), **orchestrator-only**.
 
 - A single **`AWS::BedrockAgentCore::Memory`** resource (CDK L1 `CfnMemory`,
-  short-term only — no long-term strategies in V1) is provisioned in the
+  short-term only — no long-term strategies) is provisioned in the
   app-plane stack; its id is injected into the runtime as `AGENTCORE_MEMORY_ID`.
 - When `memory` is ON, the orchestrator is built with a Strands
   `AgentCoreMemorySessionManager` scoped by `(actor_id=user_id, session_id)`, so
@@ -197,7 +197,7 @@ Memory is a **flag-gated tokenomics lever** (`memory` on/off), **orchestrator-on
 
 > Note: today's A/B toggles `prompt_cache` over single-message scenarios, so it
 > does not exercise memory (single turns have nothing to recall). Multi-turn
-> benchmark scenarios + a memory A/B are planned — see the memory feature spec V2.
+> benchmark scenarios + a memory A/B are planned.
 
 ---
 

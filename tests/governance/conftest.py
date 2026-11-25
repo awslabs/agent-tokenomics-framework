@@ -22,8 +22,8 @@ Env:
   * TOKENOMICS_REGION         (default: us-west-2)
   * TOKENOMICS_USER_PASSWORD  (required) — demo chat users (bob/eva)
   * TOKENOMICS_ADMIN_PASSWORD (required) — control-plane admin
-  The seed creates these users only when these are set at deploy time (see
-  seed/credentials.py); export the same values here. Missing -> tests skip.
+  Export the same passwords you entered at the scripts/deploy-all.sh prompts
+  (Chat UI / Admin UI). Missing -> tests skip.
 """
 
 from __future__ import annotations

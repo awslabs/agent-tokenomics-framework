@@ -49,3 +49,73 @@ cfn_output () {
   aws cloudformation describe-stacks --region "$1" --stack-name "$2" \
     --query "Stacks[0].Outputs[?OutputKey=='$3'].OutputValue" --output text 2>/dev/null || true
 }
+
+# Cognito password policy shared by both pools (infra/stacks/auth_policy.py).
+PASSWORD_POLICY_TEXT="12+ characters, with at least one uppercase letter, one lowercase letter, one digit and one symbol"
+
+# password_ok <password>: exit 0 if it meets the Cognito pool policy. The
+# password goes in on stdin (never as a process argument). Symbols are the
+# Cognito set: https://docs.aws.amazon.com/cognito/latest/developerguide/managing-users-passwords.html
+password_ok () {
+  printf '%s' "$1" | python3 -c '
+import sys
+p = sys.stdin.read()
+symbols = set("^$*.[]{}()?\"!@#%&/\\,><:;|_~`=+-" + chr(39))
+ok = (
+    12 <= len(p) <= 256
+    and p == p.strip()
+    and any("a" <= c <= "z" for c in p)
+    and any("A" <= c <= "Z" for c in p)
+    and any("0" <= c <= "9" for c in p)
+    and any(c in symbols for c in p)
+)
+sys.exit(0 if ok else 1)'
+}
+
+# ensure_cognito_user <region> <pool-id> <email> <password> <group> [attr=value ...]
+# Create the user if missing (no invite email), else update its attributes; set
+# a permanent password; optionally add it to <group> ("" for none). Prints
+# "created" or "exists". An empty <password> keeps an existing user's password
+# and fails for a missing user. The password reaches boto3 on stdin, so it never
+# appears in the process list or on disk. Needs $PYBIN (the infra venv python).
+ensure_cognito_user () {
+  local region="$1" pool="$2" email="$3" pw="$4" group="$5" attrs state
+  shift 5
+  attrs="$(python3 -c '
+import json, sys
+email, *pairs = sys.argv[1:]
+attrs = [{"Name": "email", "Value": email}, {"Name": "email_verified", "Value": "true"}]
+for p in pairs:
+    k, v = p.split("=", 1)
+    attrs.append({"Name": k, "Value": v})
+print(json.dumps(attrs))' "$email" "$@")"
+
+  if aws cognito-idp admin-get-user --region "$region" --user-pool-id "$pool" \
+      --username "$email" >/dev/null 2>&1; then
+    state="exists"
+    aws cognito-idp admin-update-user-attributes --region "$region" --user-pool-id "$pool" \
+      --username "$email" --user-attributes "$attrs" >/dev/null || return 1
+  else
+    [ -n "$pw" ] || { echo "[deploy] ERROR: $email does not exist and no password was given. Run: ./scripts/deploy-all.sh" >&2; return 1; }
+    state="created"
+    aws cognito-idp admin-create-user --region "$region" --user-pool-id "$pool" \
+      --username "$email" --user-attributes "$attrs" --message-action SUPPRESS >/dev/null || return 1
+  fi
+
+  # Callers capture stdout via $(...), where bash turns off `set -e`, so every
+  # step returns its failure explicitly.
+  if [ -n "$pw" ]; then
+    # boto3 from the infra venv: the AWS CLI can't read --cli-input-json from a
+    # pipe, and passing --password would expose it in the process list.
+    printf '%s' "$pw" | "${PYBIN:-$ROOT/infra/.venv/bin/python}" -c '
+import sys, boto3
+boto3.client("cognito-idp", region_name=sys.argv[1]).admin_set_user_password(
+    UserPoolId=sys.argv[2], Username=sys.argv[3], Password=sys.stdin.read(), Permanent=True)' \
+      "$region" "$pool" "$email" || return 1
+  fi
+  if [ -n "$group" ]; then
+    aws cognito-idp admin-add-user-to-group --region "$region" --user-pool-id "$pool" \
+      --username "$email" --group-name "$group" || return 1
+  fi
+  echo "$state"
+}

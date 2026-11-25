@@ -4,9 +4,9 @@ A lightweight [Agent Skill](https://agentskills.io) that guides developers on to
 best practices for agentic AI on Amazon Bedrock / AgentCore / Strands Agents, directly
 in the IDE. It is the Developer Tools building block of the Agent Tokenomics Framework.
 
-**v0.1 scope — Optimization pillar only:** prompt-cache placement, system-prompt
+**Scope — Optimization pillar only:** prompt-cache placement, system-prompt
 optimization, context management, intra-session tool result caching, model routing, and
-request batching. Governance and Observability will be added in later versions.
+request batching. Governance and Observability are not covered yet.
 
 What it does:
 - **Advise:** answers tokenomics questions with the fix, the quality risk, and how to verify.
