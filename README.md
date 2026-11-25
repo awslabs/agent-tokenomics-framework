@@ -27,15 +27,7 @@ across thousands of sessions, often staying invisible until the bill arrives. Cu
 isn't the hard part; keeping it down is. Agents behave differently every run, and a change that
 cuts cost today can regress after the next deploy.
 
-Tokenomics answers the three questions you end up asking about agent token cost:
-
-| Question | Pillar | What it does |
-|----------|--------|--------------|
-| What do I fix first? | **Optimization** | Spend fewer tokens on the typical run. Most agent cost is the same tokens paid for over and over. |
-| How do I keep it within limits? | **Governance** | Cap the outlier run in-loop, before it blows the budget. Billing data can take hours to update. |
-| How do I prove it worked? | **Observability** | See cost in dollars, find where tokens go, and confirm a change really saved money. |
-
-The framework implements tokenomics design patterns across these pillars, using primitives that
+The framework implements tokenomics design patterns across the three pillars, using primitives that
 AgentCore and the Strands SDK already provide (prompt caching, hooks, execution limits, memory),
 and adds the capabilities they leave out: dollarized cost, feature flags, usage plans, A/B
 benchmarks and an Advisor.
@@ -60,7 +52,7 @@ It has four components, each building on the one before:
    token limits set in the control plane.
 2. **Tokenomics control plane.** A single pane of glass where an admin sees cost, sets limits and
    proves savings without touching the agent's code (see [Features](#features)).
-3. **Tokenomics Advisor.** A read-only assistant in the admin UI you ask in plain language
+3. **[Tokenomics Advisor](docs/DEVELOPER_GUIDE.md#48-advisor).** A read-only assistant in the admin UI you ask in plain language
    ("what should I fix next?", "why did cost jump this week?"). It grounds every answer in your
    metrics, flags, governance settings and a catalog of tokenomics patterns.
 4. **Tokenomics Agent Skill.** A developer tool in the [Agent Skills](skills/agent-tokenomics/)
@@ -84,21 +76,20 @@ and can be benchmarked against a baseline.
 
 | Pattern | What it does |
 |---------|--------------|
-| **Prompt-cache placement** | Orders the prompt and places cache breakpoints so the model reuses the stable prefix instead of reprocessing it every call. |
-| **Context management** | Keeps the context window bounded by masking older tool history and using Strands' native sliding-window and summarizing conversation managers. |
-| **Model routing by step complexity** | An LLM-as-a-judge classifies each step; simple steps go to a cheaper model, hard ones to a more capable model. |
-| **System-prompt optimization** | Removes repeated instructions and ships the shorter text as a frozen, versioned prompt. |
-| **Conversation memory** | Keeps context across turns with AgentCore Memory; a baseline that lets you measure how caching and context management affect cost. |
+| **[Prompt-cache placement](docs/optimisation-patterns/prompt-caching.md)** | Orders the prompt and places cache breakpoints so the model reuses the stable prefix instead of reprocessing it every call. |
+| **[Context management](docs/optimisation-patterns/context-management.md)** | Keeps the context window bounded by masking older tool history and using Strands' native sliding-window and summarizing conversation managers. |
+| **[Model routing by step complexity](docs/optimisation-patterns/model-routing.md)** | An LLM-as-a-judge classifies each step; simple steps go to a cheaper model, hard ones to a more capable model. |
+| **[Conversation memory](docs/optimisation-patterns/conversation-memory.md)** | Keeps context across turns with AgentCore Memory; a baseline that lets you measure how caching and context management affect cost. |
 
 ### Control plane
 
 | Feature | What it does |
 |---------|--------------|
-| **Token analytics** | Dollarized spend, savings and usage by agent, user and time window. |
-| **Token governance** | Usage plans the agent enforces on every turn: per-user daily and monthly quotas, a per-minute throttle, per-agent ceilings and a per-session budget. When a limit trips, the run stops cleanly with a note saying which limit applied. |
-| **Feature flags** | Switch each pattern on or off on the live agent, with no code change or redeploy. The agent picks it up on its next turn. |
-| **Benchmarking** | Runs the same multi-turn conversations twice (baseline vs candidate pattern set) and compares tokens, cost per session, model calls and the cost gain. |
-| **Activity log** | Who changed which flag, usage plan or benchmark, and when (old → new). |
+| **[Token analytics](docs/DEVELOPER_GUIDE.md#42-analytics)** | Dollarized spend, savings and usage by agent, user and time window. |
+| **[Token governance](docs/DEVELOPER_GUIDE.md#45-token-governance)** | Usage plans the agent enforces on every turn: per-user daily and monthly quotas, a per-minute throttle, per-agent ceilings and a per-session budget. When a limit trips, the run stops cleanly with a note saying which limit applied. |
+| **[Feature flags](docs/DEVELOPER_GUIDE.md#43-feature-flags)** | Switch each pattern on or off on the live agent, with no code change or redeploy. The agent picks it up on its next turn. |
+| **[Benchmarking](docs/DEVELOPER_GUIDE.md#44-benchmarking)** | Runs the same multi-turn conversations twice (baseline vs candidate pattern set) and compares tokens, cost per session, model calls and the cost gain. |
+| **[Activity log](docs/DEVELOPER_GUIDE.md#410-activity-log)** | Who changed which flag, usage plan or benchmark, and when (old → new). |
 
 Limits are enforced inside the agent loop: a Strands `BeforeModelCallEvent` hook checks each
 user's quota before every model call on the orchestrator and both specialists, Strands limits cap
@@ -210,10 +201,21 @@ bash scripts/destroy-all.sh
 
 ---
 
+## Testing
+
+The repo ships offline unit tests and opt-in live suites that run against your deployed stack
+(governance and benchmarking). See [Developer Guide §8](docs/DEVELOPER_GUIDE.md#8-testing) for
+the commands and what each suite covers.
+
+---
+
 ## Documentation
 
 - [Developer Guide](docs/DEVELOPER_GUIDE.md): code-level design of both planes, the patterns,
   governance, users, extending the framework and testing (§8).
+- [Optimization patterns](docs/optimisation-patterns/): a detailed, code-level guide per pattern:
+  [prompt caching](docs/optimisation-patterns/prompt-caching.md), [conversation memory](docs/optimisation-patterns/conversation-memory.md),
+  [context management](docs/optimisation-patterns/context-management.md) and [model routing](docs/optimisation-patterns/model-routing.md).
 - [Agent Skill](skills/agent-tokenomics/): the developer tool and its pattern references.
 
 ---
