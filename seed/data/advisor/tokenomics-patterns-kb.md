@@ -7,7 +7,7 @@ prove a change helped — cost and quality together).
 
 This knowledge base is a catalog of cost patterns for a multi-agent customer-support system (a Sonnet
 orchestrator that delegates in-process to Haiku/Nova specialists, with prompt caching and short-term
-conversation memory as toggleable levers). Each pattern describes a cost problem, the signals that
+conversation memory as toggleable patterns). Each pattern describes a cost problem, the signals that
 indicate it, the recommended fix, and the quality tradeoff. Use a pattern by matching an observed
 signal in the usage data, then giving the recommendation with its expected effect and quality risk,
 citing the pattern `id`.
@@ -117,8 +117,8 @@ Cost attributed per model, per agent, per user, and per session is what turns "t
   re-measure quality.
 - **applies_to:** agent, prompt
 
-### TKN-05 — Conversation memory as a managed cost lever
-- **pillar:** Optimisation lever
+### TKN-05 — Conversation memory as a managed cost pattern
+- **pillar:** Optimisation pattern
 - **problem:** Short-term conversation memory is not waste to remove — it is a cost *source* to manage.
   Replaying prior turns grows per-turn input tokens, which is exactly the cost that context management
   and prompt caching then act on.
@@ -299,7 +299,7 @@ Cost attributed per model, per agent, per user, and per session is what turns "t
 
 ### TKN-18 — Prompt-cache hit-rate and savings observability
 - **pillar:** Observability
-- **problem:** Caching is the single biggest cost lever but it is silent — a prefix edit can halve the
+- **problem:** Caching is the single biggest cost pattern but it is silent — a prefix edit can halve the
   hit rate and multiply spend, and the team often finds out only from the invoice.
 - **signal:** A falling cache hit rate or read-to-write ratio over time; a regression right after a
   prompt or tool-description change.
@@ -349,7 +349,7 @@ Cost attributed per model, per agent, per user, and per session is what turns "t
   the tail.
 - **Optimisation and governance are complementary.** Optimisation lowers the average run; governance
   bounds the worst run. A system usually needs both.
-- **Levers interact.** Memory raises per-turn cost; caching and context management reclaim and bound it.
+- **Patterns interact.** Memory raises per-turn cost; caching and context management reclaim and bound it.
   Routing lowers blended cost but can raise quality risk. Always consider the combination, not one
   pattern in isolation.
 - **Prove every change with cost and quality together.** Report the cost delta alongside a quality or

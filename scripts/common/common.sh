@@ -18,6 +18,40 @@ CDK="npx --yes aws-cdk@2.1149.0"
 # so an unset region lands every stack + the runtime in one region.
 DEFAULT_REGION="us-east-1"
 
+# Regions the solution supports (one source of truth for all deploy scripts).
+# The Haiku 5.5 and Nova Lite model ids use `us.` cross-Region inference
+# profiles (shared/price_map.py), which work only from US Regions, and
+# AgentCore Memory is not available in us-west-1.
+SUPPORTED_REGIONS="us-east-1 us-east-2 us-west-2"
+
+# region_label <region>: echo the Region's display name.
+region_label () {
+  case "$1" in
+    us-east-1) echo "US East (N. Virginia)" ;;
+    us-east-2) echo "US East (Ohio)" ;;
+    us-west-2) echo "US West (Oregon)" ;;
+    *) echo "" ;;
+  esac
+}
+
+# region_supported <region>: exit 0 if the region is in SUPPORTED_REGIONS.
+region_supported () {
+  local r
+  for r in $SUPPORTED_REGIONS; do
+    [ "$r" = "$1" ] && return 0
+  done
+  return 1
+}
+
+# require_supported_region <region>: fail with the supported list if not supported.
+require_supported_region () {
+  if ! region_supported "$1"; then
+    echo "[deploy] ERROR: region '$1' is not supported. Supported: ${SUPPORTED_REGIONS// /, }." >&2
+    echo "  Set AWS_REGION to one of them, or run: bash scripts/deploy-all.sh" >&2
+    exit 1
+  fi
+}
+
 # resolve_region: set REGION from (in order) $AWS_REGION, infra/.deploy-region,
 # else DEFAULT_REGION. Requires $ROOT to be set by the caller.
 resolve_region () {

@@ -20,6 +20,7 @@ source "$ROOT/scripts/common/common.sh"   # CDK version, resolve_region, cfn_out
 
 ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
 resolve_region   # -> REGION
+require_supported_region "$REGION"
 
 # The CDK Python environment is created by scripts/deploy-all.sh (step 1).
 PYBIN="$(require_infra_venv "$ROOT")"

@@ -60,7 +60,7 @@ The framework answers all three with a **two-plane** design:
   orchestrator plus two specialists) running on Amazon Bedrock AgentCore Runtime. Every turn
   is metered, cost-attributed, and governed **in-loop**.
 - A **Tokenomics Control Plane** — an admin app for analytics, feature flags, benchmarking,
-  and token governance. Operators flip levers and set limits here; the agent picks them up on
+  and token governance. Operators toggle patterns and set limits here; the agent picks them up on
   the next turn with **no redeploy**.
 
 Two principles run through the codebase and are worth internalizing before you read on:
@@ -68,9 +68,9 @@ Two principles run through the codebase and are worth internalizing before you r
 - **Reuse, never duplicate.** The solution leans on what the SDK already ships (Bedrock
   Converse prompt caching, Strands `Limits`, AgentCore Memory) rather than hand-rolling
   equivalents. See `tokenomics/factory.py` for the clearest statement of this.
-- **Ship all code, gate on flags.** Every lever (prompt caching, memory) is baked into the
+- **Ship all code, gate on flags.** Every pattern (prompt caching, memory) is baked into the
   agent and defaults OFF. The control plane flips a DynamoDB flag; the agent reads it. There
-  is no feature branch and no stack change to turn a lever on.
+  is no feature branch and no stack change to turn a pattern on.
 
 Who it is for: teams building agentic applications on AWS who need a concrete, inspectable
 pattern for cost attribution, governance, and before/after optimization — not a slide, a
@@ -83,6 +83,8 @@ running system you can deploy and extend.
 The system is **two independent planes joined by one small, explicit contract.** Each plane
 owns its own data and deploys on its own; the only coupling is a pair of fixed-named,
 shared DynamoDB config tables and a one-directional telemetry stream.
+
+![Solution architecture](diagrams/solution-architecture.png)
 
 ### The three CDK stacks
 
@@ -139,7 +141,7 @@ self.usage_plans_table = dynamodb.Table(
 ```
 
 - **`Tokenomics-Flags`** — control plane *writes*, agent *reads*. One item per feature. Drives
-  the prompt-cache and memory levers.
+  the prompt-cache and memory patterns.
 - **`Tokenomics-UsagePlans`** — control plane *writes*, agent *reads*. One item per `plan_id`
   (`agent#<name>`, `user#default`). Drives all in-loop governance caps + the per-user quota.
 
@@ -207,6 +209,8 @@ flowchart LR
 ---
 
 ## 3. Application plane
+
+![Application plane](diagrams/app-plane.png)
 
 ### 3.1 Use-case overview
 
@@ -345,7 +349,7 @@ sequenceDiagram
   HT-->>RT: return reply usage identity model_ids governance
   RT-->>API: response
   API-->>SPA: 200 reply or 403 or 429 if denied
-  SPA->>Cust: reply with cost and active levers
+  SPA->>Cust: reply with cost and active patterns
 ```
 
 ### 3.3 Front-end (chat SPA)
@@ -355,14 +359,14 @@ every request carries the Cognito id token. Build-time config is injected throug
 variables by the deploy script (API base, user pool, client id, region).
 
 The client knows how to render the tokenomics story the agent returns — the cost line and the
-"active levers" indicator both come straight off the response:
+"active patterns" indicator both come straight off the response:
 
 `web/app-plane/src/api.ts`
 ```typescript
 export interface ChatResult {
   reply: string;
   usage: Usage;
-  /** Which tokenomics levers were active on this response, e.g.
+  /** Which tokenomics patterns were active on this response, e.g.
    *  "prompt_cache=on+memory=on" | "baseline". From the agent's identity block. */
   flagConfig?: string;
   /** Enforcement outcome (in-loop caps). Present when governance is configured. */
@@ -673,6 +677,8 @@ vars, so the container runs unmodified.
 
 #### AgentCore Memory (short-term, flag-gated)
 
+> **Deeper reference:** [`docs/optimisation-patterns/conversation-memory.md`](optimisation-patterns/conversation-memory.md).
+
 Memory is **short-term only** (raw conversation events; no long-term strategies). It is
 provisioned as a `CfnMemory` resource and gated behind the `memory` flag:
 
@@ -754,7 +760,14 @@ Strands is the agent framework. The solution uses:
 
 ### 3.6 Tokenomics design patterns
 
-#### Prompt caching (the headline cost lever)
+> Each optimization pattern has a detailed, code-level guide in `docs/optimisation-patterns/`:
+> [prompt caching](optimisation-patterns/prompt-caching.md), [conversation memory](optimisation-patterns/conversation-memory.md),
+> [context management](optimisation-patterns/context-management.md) and [model routing](optimisation-patterns/model-routing.md).
+> This section is the quick tour.
+
+#### Prompt caching (the headline cost pattern)
+
+> **Deeper reference:** [`docs/optimisation-patterns/prompt-caching.md`](optimisation-patterns/prompt-caching.md).
 
 Prompt caching is implemented by **constructing the `BedrockModel` with a `CacheConfig`** when
 the `prompt_cache` flag is on — not by a runtime hook. Strands then places the Bedrock
@@ -799,7 +812,7 @@ this is exactly right — each conversation is built fresh under one pinned flag
 > `PromptCacheHook` / `BeforeModelInvocation` hook. The as-built uses construction-time
 > `CacheConfig`. The hook form is design intent, superseded. Trust the code.
 
-The lever's tunables live in the flag schema:
+The pattern's tunables live in the flag schema:
 
 `src/shared/flags_schema.py`
 ```python
@@ -815,6 +828,8 @@ Note: `build_model` consumes only `ttl` (with `strategy="auto"`, the SDK decides
 
 #### Context management (keeps memory-restored history bounded)
 
+> **Deeper reference:** [`docs/optimisation-patterns/context-management.md`](optimisation-patterns/context-management.md).
+
 With `memory` on, the orchestrator re-sends every prior turn on every model call, so each turn
 costs more than the last. The `context_management` flag keeps that history lean using
 **Strands' native conversation managers** (configure, don't rebuild), plus one small,
@@ -825,7 +840,7 @@ delegation), defaults **OFF**, and has an effect only with `memory` on.
 
 | Layer | When | What it does |
 |---|---|---|
-| 1. Observation masking (primary) | Always, when the lever is ON | After memory restores history, each prior `toolUse` becomes `[earlier call: ask_order(...)]` and each `toolResult` (the specialist answer — most of the tokens) becomes a fixed placeholder. Your questions and the agent's final replies are kept |
+| 1. Observation masking (primary) | Always, when the pattern is ON | After memory restores history, each prior `toolUse` becomes `[earlier call: ask_order(...)]` and each `toolResult` (the specialist answer — most of the tokens) becomes a fixed placeholder. Your questions and the agent's final replies are kept |
 | 2a. Sliding window | `prompt_cache` OFF | `SlidingWindowConversationManager(window_size, per_turn=True)` — keep the last N messages, trimmed before every model call |
 | 2b. Summarize (safety net) | `prompt_cache` ON | `SummarizingConversationManager` with proactive compression — once the **whole prompt** reaches `compress_at_tokens`, a Haiku summarizer folds the oldest messages into one summary |
 
@@ -887,7 +902,7 @@ class ContextManagementParams:
 > re-summarizes on every model call, each pass summarizing the previous summary — early facts
 > fade and the cache breaks every call. At 2,000 this happened on nearly every turn in testing.
 
-**Wiring in the orchestrator runner.** Three details make the lever correct across turns:
+**Wiring in the orchestrator runner.** Three details make the pattern correct across turns:
 
 `src/app-plane/agents/orchestrator/agent.py`
 ```python
@@ -899,17 +914,17 @@ blocks_masked = (mask_restored_tool_history(orchestrator.messages)
                  if session_manager and ctx_mgr.mask_tool_history else 0)
 ```
 
-1. **A manager is attached on every turn — even when the lever is OFF.** AgentCore Memory
+1. **A manager is attached on every turn — even when the pattern is OFF.** AgentCore Memory
    persists the conversation manager's state with its class name, and Strands'
    `restore_from_session` raises `ValueError("Invalid conversation manager state.")` if the next
    turn attaches a different class. Passing nothing would make Strands fall back to its own
    default `SlidingWindowConversationManager`, so a flag flip, `auto` changing mode when
-   `prompt_cache` is toggled, or a session started before the lever was on broke every later
+   `prompt_cache` is toggled, or a session started before the pattern was on broke every later
    turn. The factory now always returns one of two subclasses
    (`SessionSlidingWindowConversationManager` / `SessionSummarizingConversationManager`) whose
    `restore_from_session` **reconciles** a state written by another class: it keeps
    `removed_message_count` (the restore offset into stored history) and keeps a prior summary
-   when the new manager is a summarizing one. Lever OFF gets a sliding window with Strands' own
+   when the new manager is a summarizing one. Pattern OFF gets a sliding window with Strands' own
    defaults (40 messages, trim at end of turn), i.e. the same behavior as passing nothing.
 2. **Masking is count-preserving, and AgentCore's native filter is not used.** On restore,
    Strands skips the first `removed_message_count` stored messages. AgentCore's
@@ -972,7 +987,7 @@ invocation and our strategies don't switch models on a failed call, so an invoca
 single-model and the pricing is exact. See the design doc for the SDK details and the failure
 analysis.
 
-> **Deeper reference:** [`docs/optimisation-patterns/model-routing.md`](docs/optimisation-patterns/model-routing.md).
+> **Deeper reference:** [`docs/optimisation-patterns/model-routing.md`](optimisation-patterns/model-routing.md).
 
 #### Cost attribution (per agent, per model)
 
@@ -1110,7 +1125,7 @@ unauthenticated request gets `401`.
 | Agent context | name, email and tier reach the agent via JWT claims |
 
 **Demo users.** `scripts/deploy-app-plane.sh` creates every user in
-[`seed/data/users.json`](seed/data/users.json) with `ensure_cognito_user`
+[`seed/data/users.json`](../seed/data/users.json) with `ensure_cognito_user`
 (`scripts/common/common.sh`), before the seed runs. They share the Chat UI password that
 `scripts/deploy-all.sh` prompts for. `seed/load_app_plane.py` then only loads data: it looks up
 each user's `sub` and writes their orders.
@@ -1146,10 +1161,14 @@ authors the two shared config tables, runs benchmarks, and reads the Metrics tab
 analytics. Because the agent reads the same config stores, a `PUT` here changes agent behavior
 on the next turn — no redeploy.
 
+![Tokenomics control plane](diagrams/control-plane.png)
+
 ### 4.1 Metering pipeline
 
 The app plane emits **one `UsageRecorded` event per turn** and does **no aggregation**; the
 control-plane consumer (`metering_consumer.handler`) owns all of it.
+
+![Metering with Amazon EventBridge](diagrams/event-bus.png)
 
 > The bus, rule, event source, detail-types, and the fire-and-forget transport are the shared
 > EventBridge contract — documented once in §5.2. This subsection covers only what the
@@ -1578,7 +1597,7 @@ originate in the app plane's `UsageTotals` (`src/app-plane/tokenomics/cost.py`).
 ### 4.5 Token governance
 
 Governance is the heart of the control plane. It is **in-loop**: enforcement happens inside the
-Strands agent loop via hooks, keeping Bedrock Converse (and therefore the prompt-cache lever)
+Strands agent loop via hooks, keeping Bedrock Converse (and therefore the prompt-cache pattern)
 intact. The hook *mechanism* — how `QuotaHook` and `ToolCapHook` register and fire, and how
 they feed a shared `GovernanceOutcome` — is covered once in **§3.4**; this section covers the
 settings and the **order** they fire in.
@@ -1948,8 +1967,8 @@ CloudWatch (`infra/stacks/api_access_logs.py`).
 | Method | Path | Handler | Note |
 | --- | --- | --- | --- |
 | GET | `/health` | inline | liveness + whether the agent ARN is set |
-| GET | `/flags` | `flags_handler.get_flags` | read feature levers |
-| PUT | `/flags` | `flags_handler.put_flags` | write feature levers |
+| GET | `/flags` | `flags_handler.get_flags` | read feature flags |
+| PUT | `/flags` | `flags_handler.put_flags` | write feature flags |
 | GET | `/governance/config` | `governance_handler.get_config` | read the 8 governance settings |
 | PUT | `/governance/config` | `governance_handler.put_config` | write the 8 governance settings |
 | PUT | `/governance/user-override` | `governance_handler.put_user_override` | per-user caps (DORMANT) |
@@ -2024,7 +2043,7 @@ The Advisor is a read-only admin chat on the Advisor page that explains what dri
 cost and which tokenomics patterns apply, using only figures read from the Metrics and
 config tables. All of it lives in `ControlPlaneStack`.
 
-![Advisor architecture](docs/architecture/advisor-architecture.png)
+![Advisor architecture](diagrams/advisor.png)
 
 | Component | Code | Role |
 | --- | --- | --- |
@@ -2042,7 +2061,7 @@ grounding rejects it or the agent ran out of steps, retries once with the reject
 when the time left (minus a 60 s margin) still allows an agent deadline of at least 40 s. The worker writes one structured log line per turn without prompt
 or reply text. The deploy script waits for the KB ingestion of the catalog.
 
-![Advisor request flow](docs/architecture/advisor-request-flow.png)
+![Advisor request flow](diagrams/advisor-request-flow.png)
 
 **Tunables (environment variables).** The defaults live only in
 `src/control-plane/advisor/agent/settings.py`. Each one can be overridden with its environment variable.
@@ -2234,7 +2253,7 @@ tables are detailed here; the rest are described in their owning section):
 
 | Table | Named | Owner / detailed in |
 | --- | --- | --- |
-| `Tokenomics-Flags` | fixed | shared — §5.1 (feature levers; `{feature, enabled, params}`) |
+| `Tokenomics-Flags` | fixed | shared — §5.1 (feature flags; `{feature, enabled, params}`) |
 | `Tokenomics-UsagePlans` | fixed | shared — §5.1 (governance caps + per-user quota; one item per `plan_id`) |
 | `Orders` | auto | app plane — §3 (mock business data, keyed by Cognito `sub`) |
 | `Faq` | auto | app plane — §3 (mock knowledge-base data) |
@@ -2423,7 +2442,7 @@ deliverable — a file plus the symbol to open.
 | Benchmark stuck in RUNNING / no results | the background thread didn't finish within the Lambda lifetime (large scenario set) | `src/control-plane/lambda_entry.py` docstring, `handlers/benchmarks.py` `_execute_run` |
 | 403 vs 429 confusion in the chat UI | `quota` → 403, `throttle` → 429, mapped from the governance outcome | `src/app-plane/chat_api/handler.py`, §4.5 |
 | X-Ray traces missing though logs show | `tracing_enabled=False` until CloudWatch Transaction Search is enabled account-wide | `infra/stacks/app_plane_stack.py` |
-| Every turn after the first fails with `ValueError: Invalid conversation manager state.` | the conversation-manager class attached on a turn differs from the one AgentCore Memory persisted for the session (lever flipped mid-session, or `auto` changed mode). Fixed by attaching a reconciling manager on every turn; if it reappears, check that nothing builds the orchestrator without `conversation_manager=` | `src/app-plane/tokenomics/factory.py` `build_conversation_manager` / `_ReconcilingRestore`, §3.6 |
+| Every turn after the first fails with `ValueError: Invalid conversation manager state.` | the conversation-manager class attached on a turn differs from the one AgentCore Memory persisted for the session (pattern flipped mid-session, or `auto` changed mode). Fixed by attaching a reconciling manager on every turn; if it reappears, check that nothing builds the orchestrator without `conversation_manager=` | `src/app-plane/tokenomics/factory.py` `build_conversation_manager` / `_ReconcilingRestore`, §3.6 |
 | Chat shows a red "agent error" banner | the agent raised during the turn; the entrypoint returns `error` and the chat API maps it to 502 (previously a 200 with an empty reply). Full traceback is in the runtime logs | `src/app-plane/entrypoint.py` `invoke`, `src/app-plane/chat_api/handler.py`, CloudWatch runtime logs |
 | Summarizer runs on almost every turn and early facts get lost | `compress_at_tokens` is too close to the ~1.5k-token fixed prompt, so the post-summary prompt is still over the threshold | Flags page → Context management → "Max tokens before summarizing" (default 20,000), §3.6 |
 | Context management ON but nothing trimmed / summarized | `memory` OFF (nothing restored), conversation shorter than the window (~4 messages per turn vs window 12), or the prompt never reached `compress_at_tokens` | benchmark breakdown "Messages trimmed" / "Summarizations", turn usage `context_mgmt`, §3.6 |
@@ -2440,7 +2459,7 @@ snippet to copy.
 
 ### 7.1 Add a feature flag
 
-A new tokenomics lever is additive and needs no stack change (the Flags table is
+A new tokenomics pattern is additive and needs no stack change (the Flags table is
 schema-less):
 
 1. In `src/shared/flags_schema.py`, add the identifier to `ALL_FEATURES`, add a
@@ -2448,7 +2467,7 @@ schema-less):
    accessor — copy the `PROMPT_CACHE`/`MEMORY` shape.
 2. Branch on `flags.<name>.enabled` at construction in
    `src/app-plane/tokenomics/factory.py` (`build_model`/`build_specialists`) for a
-   construction-time lever, or register a `HookProvider` for a runtime lever (§7.2).
+   construction-time pattern, or register a `HookProvider` for a runtime pattern (§7.2).
 3. Toggle it from the control plane with `PUT /flags` — no control-plane schema
    change, because the control plane treats unknown flags additively.
 
@@ -2574,7 +2593,7 @@ Two layers, run with the app-plane venv (`src/app-plane/.venv/bin/python`):
 Pure-logic tests for the governance schema, the metering consumer, the price map,
 the Strands hooks, and context management (`tests/context_management/`: flag schema,
 `auto` mode selection, summarizer cost attribution, session restore across a
-mid-session lever change via a real Strands `FileSessionManager`, count-preserving
+mid-session pattern change via a real Strands `FileSessionManager`, count-preserving
 masking, the chat API's error mapping, and the benchmark roll-ups) — no AWS, no network:
 
 ```bash
@@ -2675,7 +2694,7 @@ echo '{"message": "What is your return policy?", "user_id": "bench-dev-1"}' \
   | curl -s localhost:8080/invocations -H 'Content-Type: application/json' -d @-
 ```
 
-To A/B a lever or trip a cap WITHOUT the control plane, pin `flags` and/or
+To A/B a pattern or trip a cap WITHOUT the control plane, pin `flags` and/or
 `usage_plans` on the signed request (the benchmark override path):
 
 ```bash
@@ -2712,5 +2731,5 @@ For direct-`handle_turn` assertions and offline logic checks, see §8
 ---
 
 > **Deployment and repository layout** live in the top-level
-> [`README.md`](README.md) — that is the entry point for running the solution and
+> [`README.md`](../README.md) — that is the entry point for running the solution and
 > navigating the tree. This guide stays focused on design and implementation.

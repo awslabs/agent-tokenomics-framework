@@ -33,7 +33,7 @@ if asked, say so briefly and point to the framework repo.
 
 ## The six strategies (in recommended priority order)
 
-| # | Strategy | Typical lever | Quality risk | Reference |
+| # | Strategy | Typical pattern | Quality risk | Reference |
 |---|----------|---------------|--------------|-----------|
 | 1 | Prompt-cache placement | Stable content first; ≤4 cache points; Strands `CacheConfig` | None (byte-identical output) | [prompt-caching.md](references/prompt-caching.md) |
 | 2 | System-prompt optimization | Trim filler, move dynamic content out of the prefix | Low | [system-prompt.md](references/system-prompt.md) |
